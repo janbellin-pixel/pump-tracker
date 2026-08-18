@@ -1246,3 +1246,10 @@ main {
   font-size: 12.5px;
   overflow-x: auto;
 }
+
+/* Heute schon eingetragen: Hinweis hervorheben, damit man vor dem Tippen
+   sieht, dass "Speichern" hier überschreibt statt anzuhängen. */
+.field > .label .hint-heute {
+  color: var(--accent);
+  font-weight: 700;
+}

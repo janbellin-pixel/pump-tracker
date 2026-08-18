@@ -106,6 +106,17 @@ export async function sichernFallsNoetig({ interaktiv = false } = {}) {
   if (!eingerichtet(e) || !e.auto) return { ok: false, grund: 'Automatik aus' };
   const arbeit = await offeneArbeit();
   if (!arbeit.noetig) return { ok: false, grund: 'nichts zu tun' };
+
+  // Schutz vor dem Überschreiben einer guten Sicherung mit einer leeren.
+  //
+  // Auf einem Zweitgerät – oder nachdem die Browserdaten gelöscht wurden –
+  // steht die Datenbank leer da, während in Drive die echten Daten liegen.
+  // Ohne diese Sperre würde die Automatik beim nächsten Wegschalten die
+  // Sicherung des Hauptgeräts durch eine Datei ohne Einträge ersetzen.
+  // Von Hand ausgelöst bleibt das möglich, dort sieht man ja, was passiert.
+  const anzahl = (await db.getAllEntries()).length;
+  if (anzahl === 0) return { ok: false, grund: 'keine Einträge – Automatik übersprungen' };
+
   return sichern({ interaktiv });
 }
 

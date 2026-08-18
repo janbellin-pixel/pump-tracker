@@ -368,12 +368,25 @@ async function viewEntry(exId) {
   main.replaceChildren();
 
   /* --- Zustand des Formulars --- */
+  /*
+   * Ein Eintrag je Übung und Tag.
+   *
+   * Gibt es für heute schon einen, wird er beim Speichern überschrieben statt
+   * verdoppelt – sonst stünden nach einem versehentlichen zweiten Tipp zwei
+   * Zeilen für dieselbe Einheit da. Die Maske zeigt dann den heutigen Stand
+   * und nicht den vom letzten Mal, denn was man vor sich sieht, ist genau das,
+   * was gleich überschrieben wird.
+   */
+  const heuteSchluessel = stats.tagesSchluessel(new Date().toISOString());
+  const heute = entries.find((e) => stats.tagesSchluessel(e.date) === heuteSchluessel) || null;
+  const vorlage = heute || last;
+
   const draft = {
-    weight: last ? last.weight : step * 4,
-    reps: last ? last.reps : 12,
-    sets: last ? last.sets : 3,
-    pos: last ? last.pos : 0,
-    note: '',
+    weight: vorlage ? vorlage.weight : step * 4,
+    reps: vorlage ? vorlage.reps : 12,
+    sets: vorlage ? vorlage.sets : 3,
+    pos: vorlage ? vorlage.pos : 0,
+    note: heute ? heute.note || '' : '',
     photoBlob: null,
   };
 
@@ -395,8 +408,12 @@ async function viewEntry(exId) {
     el('div', { class: 'label' }, [
       el('span', { text: 'Gewicht' }),
       el('span', {
-        class: 'hint',
-        text: last ? `zuletzt ${fmtNum(last.weight)} kg` : `Schritt ${fmtNum(step)} kg`,
+        class: 'hint' + (heute ? ' hint-heute' : ''),
+        text: heute
+          ? 'heute bereits eingetragen'
+          : last
+            ? `zuletzt ${fmtNum(last.weight)} kg`
+            : `Schritt ${fmtNum(step)} kg`,
       }),
     ]),
     weightStepper.node,
@@ -590,19 +607,33 @@ async function viewEntry(exId) {
     rows: 1,
     oninput: (e) => (draft.note = e.target.value),
   });
+  // Muss über die Eigenschaft gesetzt werden – ein value-Attribut ignoriert
+  // ein <textarea>. Ohne das stünde eine gespeicherte Notiz zwar in den Daten,
+  // das Feld sähe aber leer aus und ließe sich nicht leeren.
+  noteInput.value = draft.note;
   const noteField = el('div', { class: 'field' }, [
     el('div', { class: 'label' }, [el('span', { text: 'Notiz' })]),
     noteInput,
   ]);
 
   /* --- Speichern --- */
-  const saveBtn = el('button', { class: 'primary', type: 'button', text: 'Speichern' });
+  const saveBtn = el('button', {
+    class: 'primary',
+    type: 'button',
+    text: heute ? 'Heutigen Eintrag aktualisieren' : 'Speichern',
+  });
   saveBtn.addEventListener('click', async () => {
     saveBtn.disabled = true;
     try {
-      let photoId = null;
-      if (draft.photoBlob) photoId = await db.savePhoto(draft.photoBlob);
+      // Foto: ein neues ersetzt das alte, sonst bleibt das vorhandene stehen.
+      let photoId = heute ? heute.photoId || null : null;
+      if (draft.photoBlob) {
+        if (photoId) await db.deletePhoto(photoId);
+        photoId = await db.savePhoto(draft.photoBlob);
+      }
+
       await db.saveEntry({
+        id: heute ? heute.id : undefined, // gleiche ID = überschreiben
         exerciseId: ex.id,
         date: new Date().toISOString(),
         weight: draft.weight,
@@ -613,7 +644,7 @@ async function viewEntry(exId) {
         photoId,
       });
       haptic(30);
-      toast(`${ex.name}: ${fmtNum(draft.weight)} kg gespeichert`);
+      toast(`${ex.name}: ${fmtNum(draft.weight)} kg ${heute ? 'aktualisiert' : 'gespeichert'}`);
       go('#/');
     } catch (err) {
       console.error(err);
@@ -623,6 +654,28 @@ async function viewEntry(exId) {
   });
 
   main.append(weightField, row, photoField, noteField, saveBtn);
+
+  /* Heutigen Eintrag verwerfen – ohne dass man dafür in die Verlaufsliste muss. */
+  if (heute) {
+    main.append(
+      el('button', {
+        class: 'secondary danger',
+        type: 'button',
+        text: '🗑  Heutigen Eintrag löschen',
+        onclick: async () => {
+          const ok = await confirmDialog(
+            'Heutigen Eintrag löschen?',
+            `${fmtNum(heute.weight)} kg · ${heute.sets}×${heute.reps}. Ältere Einträge dieser Übung bleiben erhalten.`,
+            'Löschen'
+          );
+          if (!ok) return;
+          await db.deleteEntry(heute.id);
+          toast('Heutiger Eintrag gelöscht');
+          viewEntry(exId);
+        },
+      })
+    );
+  }
 
   /* --- Historie --- */
   if (entries.length) {
