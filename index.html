@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Pump Tracker</title>
+    <meta name="description" content="Gewichte an Fitnessgeräten mitschreiben – schnell, offline, ohne Konto." />
+    <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4f5f8" media="(prefers-color-scheme: light)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Pump" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar" id="topbar"></header>
+      <main id="main">
+        <div id="boot-hinweis" hidden>
+          <h2>Die App muss über einen Webserver laufen</h2>
+          <p>
+            Sie wurde gerade direkt aus dem Dateisystem geöffnet
+            (<code>file://</code>). Chrome blockiert dort das Nachladen der
+            Programmteile und verbietet den Datenspeicher – deshalb bleibt das
+            Fenster leer. Das lässt sich nicht in der App beheben, es ist eine
+            Sicherheitsregel des Browsers.
+          </p>
+          <p><strong>Zum Ausprobieren auf diesem Rechner:</strong> im Ordner der App
+            eine PowerShell öffnen und starten:</p>
+          <pre>powershell -ExecutionPolicy Bypass -File serve.ps1</pre>
+          <p>
+            Danach <code>http://localhost:8080/</code> aufrufen. Fürs Handy
+            zeigt das Skript zusätzlich eine Adresse im WLAN an.
+          </p>
+          <p>
+            <strong>Zum dauerhaften Installieren</strong> brauchst du HTTPS –
+            der Weg über GitHub Pages steht in der <code>README.md</code>.
+          </p>
+        </div>
+      </main>
+    </div>
+    <nav class="tabbar" id="tabbar" aria-label="Hauptbereiche"></nav>
+    <div id="toast" role="status" aria-live="polite"></div>
+
+    <!--
+      Bewusst ein klassisches Skript, kein Modul: genau dann, wenn die Module
+      nicht geladen werden können, muss dieser Teil noch laufen. Sonst stünde
+      der Nutzer vor einem leeren Fenster ohne jeden Hinweis.
+    -->
+    <script>
+      window.__pumpBooted = false;
+      setTimeout(function () {
+        if (!window.__pumpBooted) {
+          var h = document.getElementById('boot-hinweis');
+          if (h) h.hidden = false;
+        }
+      }, 1500);
+    </script>
+    <script type="module" src="./app.js"></script>
+    <noscript>
+      <p style="padding: 20px">Pump Tracker braucht JavaScript.</p>
+    </noscript>
+  </body>
+</html>
