@@ -290,3 +290,19 @@ Prüfen, ob der neue Stand wirklich online ist:
 ```bash
 curl -s "https://janbellin-pixel.github.io/pump-tracker/sw.js" | grep CACHE
 ```
+
+## Wo das Projekt liegt
+
+```
+C:\Users\jbell\Projekte\Pump-Tracker
+```
+
+Bewusst **außerhalb von OneDrive**: OneDrive synchronisiert die vielen kleinen
+Dateien in `.git` mit und kann sie mitten in einer Git-Operation sperren – eine
+bekannte Ursache für beschädigte Repositories. Die Sicherung übernimmt jetzt
+GitHub, eine zusätzliche Cloud-Synchronisierung des Ordners bringt nichts.
+
+Der Ordner `OneDrive\Dokumente\Claude-Projekte` ist zudem für Programme
+schreibgeschützt: Windows Defender hat den *Überwachten Ordnerzugriff* aktiv,
+und OneDrive hat den Systemordner *Dokumente* dorthin umgeleitet. Schreibfehler
+melden sich dort irreführend als „Datei nicht gefunden".
