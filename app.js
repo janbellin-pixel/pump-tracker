@@ -289,7 +289,7 @@ function sparkline(entries) {
 /* ---------------- Sicherungsleiste auf der Hauptseite ---------------- */
 
 /**
- * Zeigt den Sicherungsstand und bietet „Sichern & schließen" an.
+ * Zeigt den Sicherungsstand und bietet „Training abschließen" an.
  *
  * Hintergrund: Eine installierte Web-App lässt sich auf Android nicht wirklich
  * schließen – das Wischen führt nur zurück. Die Sicherung beim Wegschalten
@@ -299,7 +299,7 @@ function sparkline(entries) {
  * Die App kann sich nicht selbst schließen: `window.close()` verweigert eine
  * Seite, die nicht per Skript geöffnet wurde, und für installierte Web-Apps
  * gibt es dafür keine Schnittstelle. Ein früherer Versuch damit blieb wirkungslos
- * und die Beschriftung „Sichern & schließen" versprach entsprechend zu viel.
+ * und die frühere Beschriftung versprach entsprechend zu viel.
  * Der Knopf heißt deshalb jetzt nach dem, was er tatsächlich leistet.
  */
 async function sicherungsLeiste() {
