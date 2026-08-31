@@ -1253,3 +1253,135 @@ main {
   color: var(--accent);
   font-weight: 700;
 }
+
+/* ---------- Sicherungsleiste auf der Hauptseite ---------- */
+
+.save-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.save-bar.offen {
+  border-color: var(--accent);
+}
+
+.save-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.save-status {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.save-status.ok {
+  color: var(--good);
+}
+
+.save-status.offen {
+  color: var(--accent);
+}
+
+.save-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.save-btn {
+  flex: none;
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.save-btn[disabled] {
+  opacity: 0.6;
+}
+
+.save-hint {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+/* ---------- Reihenfolge ändern ---------- */
+
+.sort-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sort-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 10px;
+  min-height: 58px;
+}
+
+.sort-nr {
+  width: 20px;
+  flex: none;
+  text-align: right;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sort-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.sort-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sort-gruppe {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sort-btn {
+  width: 40px;
+  height: 44px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 18px;
+  color: var(--text);
+}
+
+.sort-btn[disabled] {
+  opacity: 0.3;
+}
+
+.sort-btn:active:not([disabled]) {
+  background: var(--accent);
+  color: var(--accent-ink);
+}

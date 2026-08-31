@@ -2,7 +2,7 @@
  * Offline-Cache. Bei jeder Änderung an den Dateien CACHE hochzählen –
  * sonst behält das Handy die alte Version.
  */
-const CACHE = 'pump-tracker-v8';
+const CACHE = 'pump-tracker-v9';
 
 const ASSETS = [
   './',
@@ -16,6 +16,7 @@ const ASSETS = [
   './drive.js',
   './backup.js',
   './exercise-icons.js',
+  './reihenfolge.js',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',

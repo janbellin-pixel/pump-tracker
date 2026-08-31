@@ -151,7 +151,10 @@ Gültigkeit und kein dauerhaftes Refresh-Token. Eine Sicherung, die läuft,
 während die App geschlossen ist, ist damit **nicht möglich** – auch nicht über
 Hintergrund-Synchronisierung, weil das Token dann längst abgelaufen wäre.
 
-Nach der einmaligen Freigabe erneuert die App das Token still bei jedem Start.
+Das Zugangstoken wird gespeichert und übersteht Neustarts der App – innerhalb
+seiner Gültigkeit (rund eine Stunde) ist gar keine Anmeldung nötig. Danach
+erneuert die App es still im Hintergrund, solange du in Chrome bei Google
+angemeldet bist.
 Du wirst also nicht jedes Mal neu gefragt, solange du in Chrome bei Google
 angemeldet bleibst.
 
@@ -306,3 +309,43 @@ Der Ordner `OneDrive\Dokumente\Claude-Projekte` ist zudem für Programme
 schreibgeschützt: Windows Defender hat den *Überwachten Ordnerzugriff* aktiv,
 und OneDrive hat den Systemordner *Dokumente* dorthin umgeleitet. Schreibfehler
 melden sich dort irreführend als „Datei nicht gefunden".
+
+## Reihenfolge der Übungen
+
+Über das **⇅** oben rechts in der Übungsliste. Zwei Wege:
+
+- **Von Hand:** ↑/↓ je Zeile. Bewusst keine Zieh-Geste – die kollidiert auf dem
+  Handy mit dem Scrollen und trifft bei vielen Zeilen selten auf Anhieb.
+- **Vorschlagen lassen:** Der Knopf ordnet so um, dass gleiche Muskelgruppen
+  möglichst weit auseinanderliegen. Oben steht der *engste Abstand* – bei den
+  14 Standardgeräten verbessert der Vorschlag ihn von 1 auf 2. Mehr ist dort
+  nicht drin, weil fünf der vierzehn Übungen Beine sind.
+
+Das ist ein Algorithmus, keine KI-Anfrage: die Aufgabe ist klar definiert, also
+rechnet die App sie offline aus – kostenlos, ohne Netz und jedes Mal gleich.
+
+Ausdauergeräte (Laufband, Fahrrad, Crosstrainer, Rudergerät) wandern immer ans
+Ende; vor dem Krafttraining würden sie die Beine vorermüden.
+
+Die Muskelgruppe wird aus dem Symbol abgeleitet und lässt sich pro Übung im
+Menü *⋯* ändern – nötig bei Übungen, deren Name kein Symbol trifft.
+
+## Sichern & schließen
+
+Eine installierte Web-App lässt sich auf Android nicht wirklich schließen; das
+Wischen führt nur zurück. Deshalb sitzt oben auf der Übungsliste eine Leiste
+mit dem Sicherungsstand und dem Knopf **„Sichern & schließen"**. Nach dem
+Training einmal antippen, die Bestätigung abwarten, fertig.
+
+`window.close()` wird versucht, funktioniert bei einer nicht per Skript
+geöffneten Seite aber meist nicht. Der Knopf ist nicht darauf angewiesen – das
+Ergebnis ist die Sicherung, nicht das Schließen.
+
+## Übungen löschen
+
+Zwei Stufen im Menü *⋯*:
+
+- **Ausblenden** – verschwindet aus der Liste, Einträge bleiben, jederzeit in
+  den Einstellungen wieder einblendbar.
+- **Endgültig löschen** – entfernt die Übung samt aller Einträge und Fotos. Die
+  Rückfrage nennt vorher die genaue Zahl der betroffenen Einträge.

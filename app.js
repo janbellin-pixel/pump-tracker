@@ -1,6 +1,7 @@
 import * as db from './db.js';
 import * as charts from './charts.js';
 import * as stats from './stats.js';
+import * as reihenfolge from './reihenfolge.js';
 import * as backup from './backup.js';
 import * as drive from './drive.js';
 import { ICONS } from './exercise-icons.js';
@@ -285,16 +286,103 @@ function sparkline(entries) {
   });
 }
 
+/* ---------------- Sicherungsleiste auf der Hauptseite ---------------- */
+
+/**
+ * Zeigt den Sicherungsstand und bietet „Sichern & schließen" an.
+ *
+ * Hintergrund: Eine installierte Web-App lässt sich auf Android nicht wirklich
+ * schließen – das Wischen führt nur zurück. Die Sicherung beim Wegschalten
+ * greift zwar, aber man sieht ihr Ergebnis nie. Dieser Knopf macht daraus
+ * einen bewussten Abschluss: sichern, Rückmeldung abwarten, dann erst weg.
+ *
+ * `window.close()` funktioniert bei einer nicht per Skript geöffneten Seite
+ * meist nicht – deshalb ist der Knopf nicht darauf angewiesen. Er gilt als
+ * erfolgreich, wenn die Sicherung durch ist; das Schließen ist nur ein Versuch.
+ */
+async function sicherungsLeiste() {
+  const e = await backup.einstellungen();
+  if (!backup.eingerichtet(e)) return document.createDocumentFragment();
+
+  const arbeit = await backup.offeneArbeit();
+  const gueltigBis = await drive.anmeldungGueltigBis();
+
+  const box = el('div', { class: 'save-bar' + (arbeit.noetig ? ' offen' : '') });
+
+  const wann = e.letzteSicherung
+    ? new Date(e.letzteSicherung).toLocaleString('de-DE', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+      })
+    : 'noch nie';
+
+  box.append(
+    el('div', { class: 'save-info' }, [
+      el('div', {
+        class: 'save-status ' + (arbeit.noetig ? 'offen' : 'ok'),
+        text: arbeit.noetig ? 'Noch nicht gesichert' : 'Gesichert',
+      }),
+      el('div', { class: 'save-sub', text: `zuletzt ${wann}` }),
+    ])
+  );
+
+  const knopf = el('button', {
+    class: 'save-btn',
+    type: 'button',
+    text: arbeit.noetig ? '☁ Sichern & schließen' : '☁ Erneut sichern',
+  });
+  knopf.addEventListener('click', async () => {
+    knopf.disabled = true;
+    knopf.textContent = '☁ Sichere …';
+    const res = await backup.sichern({ interaktiv: true });
+    if (res.ok) {
+      haptic(30);
+      toast('Gesichert – du kannst die App jetzt verlassen', 3500);
+      // Versuch, sich selbst zu schließen. Klappt nur in manchen
+      // Installationen; die Meldung oben ist das eigentliche Ergebnis.
+      setTimeout(() => {
+        try {
+          window.close();
+        } catch {
+          /* erwartbar */
+        }
+      }, 1200);
+      viewList();
+    } else {
+      knopf.disabled = false;
+      knopf.textContent = '☁ Nochmal versuchen';
+      toast(`Sicherung fehlgeschlagen: ${res.grund}`, 5000);
+    }
+  });
+  box.append(knopf);
+
+  // Anmeldung läuft bald ab – lieber vorher sagen als beim Sichern scheitern.
+  if (gueltigBis && gueltigBis < Date.now()) {
+    box.append(
+      el('div', {
+        class: 'save-hint',
+        text: 'Google-Anmeldung abgelaufen – beim nächsten Sichern einmal bestätigen.',
+      })
+    );
+  }
+
+  return box;
+}
+
 /* ---------------- Ansicht: Übungsliste ---------------- */
 
 async function viewList() {
   setTop('Pump Tracker', {
-    right: [iconBtn('＋', 'Übung hinzufügen', addExerciseFlow)],
+    right: [
+      iconBtn('⇅', 'Reihenfolge ändern', () => go('#/sortieren')),
+      iconBtn('＋', 'Übung hinzufügen', addExerciseFlow),
+    ],
   });
 
   const [exercises, lastMap] = await Promise.all([db.getExercises(), db.getLastEntryMap()]);
   const main = $('#main');
   main.replaceChildren();
+
+  main.append(await sicherungsLeiste());
 
   if (!exercises.length) {
     main.append(el('p', { class: 'empty', text: 'Keine Übungen. Oben rechts auf ＋ tippen.' }));
@@ -740,6 +828,12 @@ async function exerciseMenu(ex) {
         el('button', {
           class: 'secondary',
           type: 'button',
+          text: `Muskelgruppe: ${reihenfolge.GRUPPEN[reihenfolge.gruppeVon(ex)]}`,
+          onclick: () => finish('muskel'),
+        }),
+        el('button', {
+          class: 'secondary',
+          type: 'button',
           text: ex.iconPhotoId ? '🖼  Bild ersetzen' : '🖼  Eigenes Bild wählen',
           onclick: () => finish('bild'),
         }),
@@ -756,6 +850,12 @@ async function exerciseMenu(ex) {
           type: 'button',
           text: 'Übung ausblenden',
           onclick: () => finish('archive'),
+        }),
+        el('button', {
+          class: 'secondary danger',
+          type: 'button',
+          text: '⚠  Übung endgültig löschen',
+          onclick: () => finish('delete'),
         }),
       ]),
       el('div', { class: 'dialog-actions' }, [
@@ -778,6 +878,39 @@ async function exerciseMenu(ex) {
     const parsed = parseFloat(String(v).replace(',', '.'));
     if (Number.isFinite(parsed) && parsed > 0) {
       await db.saveExercise({ ...ex, weightStep: parsed });
+      viewEntry(ex.id);
+    }
+  } else if (action === 'muskel') {
+    // Nötig für Übungen, deren Name kein Symbol trifft: die bekämen sonst
+    // dauerhaft die Ersatzgruppe und würden den Reihenfolge-Vorschlag verzerren.
+    const gewaehlt = await showDialog(
+      (finish) => [
+        el('h2', { text: 'Muskelgruppe' }),
+        el('p', {
+          style: 'color:var(--muted);font-size:13px;margin:0 0 10px',
+          text: 'Danach richtet sich der Reihenfolge-Vorschlag: gleiche Gruppen werden auseinandergezogen.',
+        }),
+        el(
+          'div',
+          { class: 'settings-list' },
+          Object.entries(reihenfolge.GRUPPEN).map(([id, label]) =>
+            el('button', {
+              class: 'secondary',
+              type: 'button',
+              text: label + (reihenfolge.gruppeVon(ex) === id ? '  ✓' : ''),
+              onclick: () => finish(id),
+            })
+          )
+        ),
+        el('div', { class: 'dialog-actions' }, [
+          el('button', { type: 'button', text: 'Abbrechen', onclick: () => finish(null) }),
+        ]),
+      ],
+      { onDismiss: null }
+    );
+    if (gewaehlt) {
+      await db.saveExercise({ ...ex, muskel: gewaehlt });
+      toast(`Muskelgruppe: ${reihenfolge.GRUPPEN[gewaehlt]}`);
       viewEntry(ex.id);
     }
   } else if (action === 'bild') {
@@ -805,7 +938,142 @@ async function exerciseMenu(ex) {
       await db.setArchived(ex.id, true);
       go('#/');
     }
+  } else if (action === 'delete') {
+    // Vor der Warnung zählen, damit dort steht, was tatsächlich verloren geht –
+    // „alle Daten" ist als Warnung zu vage, um eine Entscheidung zu tragen.
+    const anzahl = await db.zaehleEintraege(ex.id);
+    const ok = await confirmDialog(
+      `„${ex.name}“ endgültig löschen?`,
+      anzahl
+        ? `${anzahl} ${anzahl === 1 ? 'Eintrag' : 'Einträge'} samt Fotos werden mitgelöscht. Das lässt sich nicht rückgängig machen – nur über ein Backup. Zum bloßen Aufräumen der Liste reicht „Ausblenden“.`
+        : 'Die Übung hat keine Einträge, es geht also nichts verloren.',
+      'Endgültig löschen'
+    );
+    if (ok) {
+      const res = await db.deleteExercise(ex.id);
+      toast(
+        res.eintraege
+          ? `„${ex.name}“ und ${res.eintraege} ${res.eintraege === 1 ? 'Eintrag' : 'Einträge'} gelöscht`
+          : `„${ex.name}“ gelöscht`,
+        3500
+      );
+      go('#/');
+    }
   }
+}
+
+/* ---------------- Ansicht: Reihenfolge ---------------- */
+
+/**
+ * Reihenfolge ändern – mit ↑/↓ statt Ziehen.
+ *
+ * Ziehen-und-Ablegen ist auf dem Handy heikel: es kollidiert mit dem Scrollen
+ * und trifft bei 14 Zeilen selten auf Anhieb. Zwei große Knöpfe je Zeile sind
+ * langweiliger, aber im Studio mit einer Hand zuverlässig bedienbar.
+ */
+async function viewSortieren() {
+  setTop('Reihenfolge', { left: iconBtn('←', 'Zurück', () => go('#/')) });
+  const main = $('#main');
+  main.replaceChildren();
+
+  let liste = await db.getExercises();
+  if (liste.length < 2) {
+    main.append(el('p', { class: 'empty', text: 'Dafür braucht es mindestens zwei Übungen.' }));
+    return;
+  }
+
+  const inhalt = el('div');
+
+  const zeichne = () => {
+    inhalt.replaceChildren();
+
+    const abstand = reihenfolge.engsterAbstand(liste);
+    inhalt.append(
+      el('div', { class: 'field', style: 'margin-bottom:12px' }, [
+        el('div', {
+          style: 'font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:10px',
+          html:
+            `Engster Abstand zwischen zwei Übungen derselben Muskelgruppe: <strong>${
+              abstand === Infinity ? '–' : abstand
+            }</strong>. ` + 'Je größer, desto mehr Erholung liegt dazwischen.',
+        }),
+        el('button', {
+          class: 'secondary',
+          type: 'button',
+          text: '✨  Sinnvolle Reihenfolge vorschlagen',
+          onclick: () => {
+            const neu = reihenfolge.vorschlagen(liste);
+            const vorher = reihenfolge.engsterAbstand(liste);
+            const nachher = reihenfolge.engsterAbstand(neu);
+            liste = neu;
+            zeichne();
+            toast(
+              nachher > vorher
+                ? `Abstand von ${vorher} auf ${nachher} verbessert`
+                : 'Deine Reihenfolge war schon so gut wie möglich',
+              3500
+            );
+          },
+        }),
+      ])
+    );
+
+    const rows = el('div', { class: 'sort-list' });
+    liste.forEach((ex, i) => {
+      const tausche = (von, nach) => {
+        [liste[von], liste[nach]] = [liste[nach], liste[von]];
+        haptic();
+        zeichne();
+      };
+      rows.append(
+        el('div', { class: 'sort-row' }, [
+          el('span', { class: 'sort-nr', text: String(i + 1) }),
+          exerciseIcon(ex, { size: 30 }),
+          el('span', { class: 'sort-main' }, [
+            el('span', { class: 'sort-name', text: ex.name }),
+            el('span', {
+              class: 'sort-gruppe',
+              text: reihenfolge.GRUPPEN[reihenfolge.gruppeVon(ex)],
+            }),
+          ]),
+          el('button', {
+            class: 'sort-btn',
+            type: 'button',
+            text: '↑',
+            'aria-label': `${ex.name} nach oben`,
+            disabled: i === 0 ? true : null,
+            onclick: () => tausche(i, i - 1),
+          }),
+          el('button', {
+            class: 'sort-btn',
+            type: 'button',
+            text: '↓',
+            'aria-label': `${ex.name} nach unten`,
+            disabled: i === liste.length - 1 ? true : null,
+            onclick: () => tausche(i, i + 1),
+          }),
+        ])
+      );
+    });
+    inhalt.append(rows);
+
+    inhalt.append(
+      el('button', {
+        class: 'primary',
+        type: 'button',
+        style: 'margin-top:14px',
+        text: 'Reihenfolge übernehmen',
+        onclick: async () => {
+          await db.setReihenfolge(liste.map((e) => e.id));
+          toast('Reihenfolge gespeichert');
+          go('#/');
+        },
+      })
+    );
+  };
+
+  zeichne();
+  main.append(inhalt);
 }
 
 /* ---------------- Ansicht: Statistik ---------------- */
@@ -1297,6 +1565,7 @@ const REITER = [
 /** Welcher Reiter zu einem Pfad gehört – die Übungsseite zählt zu „Übungen“. */
 function aktiverReiter(hash) {
   if (hash === '#/stats') return '#/stats';
+  if (hash === '#/sortieren') return '#/';
   if (hash === '#/settings') return '#/settings';
   return '#/';
 }
@@ -1331,6 +1600,7 @@ async function route() {
   try {
     if (hash.startsWith('#/ex/')) await viewEntry(hash.slice(5));
     else if (hash === '#/stats') await viewStats();
+    else if (hash === '#/sortieren') await viewSortieren();
     else if (hash === '#/settings') await viewSettings();
     else await viewList();
     window.scrollTo(0, 0);

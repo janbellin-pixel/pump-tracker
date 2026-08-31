@@ -1,6 +1,6 @@
 /* Datenschicht: IndexedDB. Kein Framework, keine Abhängigkeiten. */
 
-import { ICON_FUER_NAME } from './exercise-icons.js';
+import { ICON_FUER_NAME, iconFuerName } from './exercise-icons.js';
 
 const DB_NAME = 'pump-tracker';
 // 2: Store "meta" für Einstellungen (Drive-Anbindung)
@@ -161,7 +161,7 @@ export async function addExercise(name, { icon = null, iconPhotoId = null } = {}
     weightStep: 4.5,
     archived: false,
     // Heißt die neue Übung wie ein bekanntes Gerät, gibt es das Symbol gratis.
-    icon: icon || ICON_FUER_NAME[sauber] || 'standard',
+    icon: icon || iconFuerName(sauber),
     iconPhotoId,
   };
   await tx('exercises', 'readwrite', (s) => s.put(ex));
@@ -347,3 +347,38 @@ export async function importAll(data) {
 }
 
 export { uid, DEFAULT_EXERCISES };
+
+/**
+ * Übung endgültig entfernen – samt aller ihrer Einträge und Fotos.
+ *
+ * Getrennt vom Ausblenden, weil hier wirklich Daten verschwinden. Die Zählung
+ * wird zurückgegeben, damit die Oberfläche vorher sagen kann, was verloren geht.
+ */
+export async function zaehleEintraege(exerciseId) {
+  return (await getEntries(exerciseId)).length;
+}
+
+export async function deleteExercise(id) {
+  const eintraege = await getEntries(id);
+  for (const e of eintraege) {
+    if (e.photoId) await deletePhoto(e.photoId);
+    await tx('entries', 'readwrite', (s) => s.delete(e.id));
+  }
+  const ex = await getExercise(id);
+  if (ex && ex.iconPhotoId) await deletePhoto(ex.iconPhotoId);
+  await tx('exercises', 'readwrite', (s) => s.delete(id));
+  await bumpRevision();
+  return { eintraege: eintraege.length };
+}
+
+/** Neue Reihenfolge festschreiben: die Liste gibt die Sortierung vor. */
+export async function setReihenfolge(ids) {
+  for (let i = 0; i < ids.length; i++) {
+    const ex = await getExercise(ids[i]);
+    if (ex && ex.sort !== i) {
+      ex.sort = i;
+      await tx('exercises', 'readwrite', (s) => s.put(ex));
+    }
+  }
+  await bumpRevision();
+}

@@ -15,10 +15,13 @@
  *    nicht bei jedem Start neu gefragt.
  */
 
+import * as db from './db.js';
+
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
 const GAPI_SRC = 'https://apis.google.com/js/api.js';
 const DATEINAME = 'pump-tracker-backup.json';
+const TOKEN_KEY = 'drive.token';
 
 /* Für Tests austauschbar: so lässt sich der ganze Ablauf ohne echte
    Zugangsdaten durchspielen. */
@@ -54,9 +57,36 @@ function ladeSkript(src) {
 let tokenClient = null;
 let token = null; // { wert, laeuftAb }
 let clientIdAktiv = null;
+let tokenGeladen = false;
 
 export function angemeldet() {
   return Boolean(token && token.laeuftAb > laufzeit.jetzt() + 30000);
+}
+
+/**
+ * Token aus der Datenbank holen.
+ *
+ * Ohne das wäre nach jedem App-Start eine neue Anmeldung nötig, obwohl das
+ * Token noch bis zu einer Stunde gültig ist – genau das Ärgernis, dass man
+ * sich „ständig neu einloggen" muss. Gespeichert wird nur das kurzlebige
+ * Zugangstoken; ein dauerhaftes Refresh-Token gibt Google an Browser-Apps
+ * ohnehin nicht heraus.
+ */
+async function tokenAusSpeicher() {
+  if (tokenGeladen) return;
+  tokenGeladen = true;
+  try {
+    const gespeichert = await db.getMeta(TOKEN_KEY, null);
+    if (gespeichert && gespeichert.laeuftAb > laufzeit.jetzt()) token = gespeichert;
+  } catch {
+    /* ohne gespeichertes Token geht es auch, nur mit Anmeldung */
+  }
+}
+
+/** Wie lange die aktuelle Anmeldung noch gilt – für die Anzeige. */
+export async function anmeldungGueltigBis() {
+  await tokenAusSpeicher();
+  return token ? token.laeuftAb : null;
 }
 
 async function tokenClientHolen(clientId) {
@@ -83,6 +113,7 @@ async function tokenClientHolen(clientId) {
  * Funktion `null`, und die Oberfläche bietet einen Knopf an.
  */
 export async function tokenBesorgen(clientId, { interaktiv = false } = {}) {
+  await tokenAusSpeicher();
   if (angemeldet()) return token.wert;
   if (!clientId) throw new Error('Keine Client-ID hinterlegt.');
 
@@ -102,6 +133,7 @@ export async function tokenBesorgen(clientId, { interaktiv = false } = {}) {
           wert: resp.access_token,
           laeuftAb: laufzeit.jetzt() + (Number(resp.expires_in) || 3600) * 1000,
         };
+        db.setMeta(TOKEN_KEY, token).catch(() => {});
         fertig(resolve, token.wert);
       } else {
         fertig(interaktiv ? reject : resolve, interaktiv ? new Error(resp?.error || 'Anmeldung abgebrochen') : null);
@@ -132,6 +164,7 @@ export function abmelden() {
     }
   }
   token = null;
+  db.setMeta(TOKEN_KEY, null).catch(() => {});
 }
 
 /* ---------------- Ordnerauswahl (Picker) ---------------- */
