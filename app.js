@@ -4,7 +4,7 @@ import * as stats from './stats.js';
 import * as reihenfolge from './reihenfolge.js';
 import * as backup from './backup.js';
 import * as drive from './drive.js';
-import { ICONS } from './exercise-icons.js';
+import { ICONS, iconFuerName } from './exercise-icons.js';
 import { shrinkImage, readNumbersFromImage, ocrStatus } from './ocr.js';
 
 // Quittung an den Hinweis in index.html: alle Module sind da. Bleibt sie aus –
@@ -296,9 +296,11 @@ function sparkline(entries) {
  * greift zwar, aber man sieht ihr Ergebnis nie. Dieser Knopf macht daraus
  * einen bewussten Abschluss: sichern, Rückmeldung abwarten, dann erst weg.
  *
- * `window.close()` funktioniert bei einer nicht per Skript geöffneten Seite
- * meist nicht – deshalb ist der Knopf nicht darauf angewiesen. Er gilt als
- * erfolgreich, wenn die Sicherung durch ist; das Schließen ist nur ein Versuch.
+ * Die App kann sich nicht selbst schließen: `window.close()` verweigert eine
+ * Seite, die nicht per Skript geöffnet wurde, und für installierte Web-Apps
+ * gibt es dafür keine Schnittstelle. Ein früherer Versuch damit blieb wirkungslos
+ * und die Beschriftung „Sichern & schließen" versprach entsprechend zu viel.
+ * Der Knopf heißt deshalb jetzt nach dem, was er tatsächlich leistet.
  */
 async function sicherungsLeiste() {
   const e = await backup.einstellungen();
@@ -328,7 +330,7 @@ async function sicherungsLeiste() {
   const knopf = el('button', {
     class: 'save-btn',
     type: 'button',
-    text: arbeit.noetig ? '☁ Sichern & schließen' : '☁ Erneut sichern',
+    text: arbeit.noetig ? '☁ Training abschließen' : '☁ Erneut sichern',
   });
   knopf.addEventListener('click', async () => {
     knopf.disabled = true;
@@ -336,16 +338,7 @@ async function sicherungsLeiste() {
     const res = await backup.sichern({ interaktiv: true });
     if (res.ok) {
       haptic(30);
-      toast('Gesichert – du kannst die App jetzt verlassen', 3500);
-      // Versuch, sich selbst zu schließen. Klappt nur in manchen
-      // Installationen; die Meldung oben ist das eigentliche Ergebnis.
-      setTimeout(() => {
-        try {
-          window.close();
-        } catch {
-          /* erwartbar */
-        }
-      }, 1200);
+      toast('Gesichert – du kannst die App jetzt weglegen', 3500);
       viewList();
     } else {
       knopf.disabled = false;
@@ -868,7 +861,10 @@ async function exerciseMenu(ex) {
   if (action === 'rename') {
     const name = await promptDialog('Übung umbenennen', { value: ex.name });
     if (name && name.trim()) {
-      await db.saveExercise({ ...ex, name: name.trim() });
+      // Hatte die Übung noch kein passendes Symbol, unter dem neuen Namen
+      // vielleicht schon – etwa wenn aus „Gerät 3" ein „Trizeps" wird.
+      const icon = ex.icon === 'standard' ? iconFuerName(name.trim()) : ex.icon;
+      await db.saveExercise({ ...ex, name: name.trim(), icon });
       viewEntry(ex.id);
     }
   } else if (action === 'step') {

@@ -330,16 +330,28 @@ Ende; vor dem Krafttraining würden sie die Beine vorermüden.
 Die Muskelgruppe wird aus dem Symbol abgeleitet und lässt sich pro Übung im
 Menü *⋯* ändern – nötig bei Übungen, deren Name kein Symbol trifft.
 
-## Sichern & schließen
+## Training abschließen
 
-Eine installierte Web-App lässt sich auf Android nicht wirklich schließen; das
-Wischen führt nur zurück. Deshalb sitzt oben auf der Übungsliste eine Leiste
-mit dem Sicherungsstand und dem Knopf **„Sichern & schließen"**. Nach dem
-Training einmal antippen, die Bestätigung abwarten, fertig.
+Eine installierte Web-App **lässt sich nicht schließen** – weder durch dich
+noch durch die App selbst. Das Wegwischen führt auf Android nur zurück, und
+`window.close()` verweigert eine Seite, die nicht per Skript geöffnet wurde;
+eine Schnittstelle zum Beenden gibt es für installierte Web-Apps nicht.
 
-`window.close()` wird versucht, funktioniert bei einer nicht per Skript
-geöffneten Seite aber meist nicht. Der Knopf ist nicht darauf angewiesen – das
-Ergebnis ist die Sicherung, nicht das Schließen.
+Was stattdessen geht: oben auf der Übungsliste sitzt eine Leiste mit dem
+Sicherungsstand und dem Knopf **„Training abschließen"**. Einmal antippen, die
+Bestätigung abwarten, Handy weglegen. Der Knopf sichert – er schließt nicht,
+und verspricht das auch nicht mehr.
+
+## Wenn Symbole fehlen
+
+Das Symbol wird beim **Anlegen** einer Übung festgeschrieben. Kommen später
+neue Symbole dazu, wirken sie nicht rückwirkend – früher angelegte Übungen
+behalten ihr Hantelsymbol.
+
+Deshalb bei jeder Erweiterung der Sammlung `DB_VERSION` in `db.js` hochzählen.
+Dann läuft beim nächsten Start die Zuordnung erneut über alle Übungen, die auf
+`standard` stehen. Bereits zugeordnete Symbole und eigene Fotos bleiben dabei
+unangetastet.
 
 ## Übungen löschen
 

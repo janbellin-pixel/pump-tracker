@@ -5,7 +5,8 @@ import { ICON_FUER_NAME, iconFuerName } from './exercise-icons.js';
 const DB_NAME = 'pump-tracker';
 // 2: Store "meta" für Einstellungen (Drive-Anbindung)
 // 3: Übungen bekommen ein Symbol (icon) und optional ein eigenes Bild
-const DB_VERSION = 3;
+// 4: Symbole neu zuordnen – neu hinzugekommene wirken sonst nicht rückwirkend
+const DB_VERSION = 4;
 
 // Die 14 Geräte vom Trainingsplan. weightStep 4.5 = 10-lbs-Platten im Stapel.
 const DEFAULT_EXERCISES = [
@@ -79,6 +80,35 @@ function openDB() {
             ex.icon = ICON_FUER_NAME[ex.name] || 'standard';
             ex.iconPhotoId = ex.iconPhotoId || null;
             c.update(ex);
+          }
+          c.continue();
+        };
+      }
+
+      if (ev.oldVersion >= 3 && ev.oldVersion < 4) {
+        /*
+         * Symbole erneut zuordnen.
+         *
+         * Das Symbol wird beim Anlegen einer Übung festgeschrieben. Kommen
+         * später neue hinzu, behalten früher angelegte Übungen dauerhaft ihr
+         * 'standard' – genau das ist bei „Trizeps Pulldowns" und
+         * „Bauchmuskeln" passiert. Deshalb bei jeder Erweiterung der Sammlung
+         * die Datenbankversion hochzählen: dann läuft diese Zuordnung erneut.
+         *
+         * Angefasst wird nur, was auf 'standard' steht – eine bewusst
+         * gewählte Zuordnung oder ein eigenes Foto bleibt unangetastet.
+         */
+        const s = req.transaction.objectStore('exercises');
+        s.openCursor().onsuccess = (e) => {
+          const c = e.target.result;
+          if (!c) return;
+          const ex = c.value;
+          if (!ex.icon || ex.icon === 'standard') {
+            const passend = iconFuerName(ex.name);
+            if (passend !== ex.icon) {
+              ex.icon = passend;
+              c.update(ex);
+            }
           }
           c.continue();
         };
