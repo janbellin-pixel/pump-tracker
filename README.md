@@ -267,3 +267,26 @@ unterschiedlich sind. Ein Backup zweimal einzuspielen ändert deshalb nichts.
 
 Nach jeder Änderung an den Dateien in `sw.js` die Zeile `const CACHE =
 'pump-tracker-v1'` hochzählen, sonst behält das Handy die alte Fassung.
+
+## Änderungen veröffentlichen
+
+Der Projektordner ist ein Git-Repository und mit
+`github.com/janbellin-pixel/pump-tracker` verbunden. Änderungen gehen damit
+direkt raus, ohne Dateien von Hand hochzuladen:
+
+```bash
+git add -A && git commit -m "Beschreibung" && git push
+```
+
+Danach dauert es ein bis zwei Minuten, bis GitHub Pages den neuen Stand
+ausliefert.
+
+**Bei jeder Änderung an den App-Dateien die Zeile `const CACHE` in `sw.js`
+hochzählen.** Sonst behalten bereits installierte Handys die alte Fassung aus
+ihrem Offline-Cache, und die Änderung kommt nie an.
+
+Prüfen, ob der neue Stand wirklich online ist:
+
+```bash
+curl -s "https://janbellin-pixel.github.io/pump-tracker/sw.js" | grep CACHE
+```
