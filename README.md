@@ -46,14 +46,18 @@ Bilder werden auf 320 px verkleinert gespeichert und landen mit im Backup.
 
 ## Der Statistik-Reiter
 
-Bewusst nur **drei Werte**, alle bezogen auf die **letzten 30 Tage**:
+Bewusst nur **drei Werte**. Der Zeitraum steht jeweils direkt am Wert – die
+Besuchszählung läuft über ein kürzeres Fenster als die beiden anderen:
 
 1. **Ø Steigerung der Gewichte in Prozent.** Gemittelt wird über die *Übungen*,
    nicht über die Einträge – sonst zöge ein Gerät, an dem du zehnmal warst, den
    Schnitt gegen eines, an dem du zweimal warst. Übungen mit nur einem Eintrag
    im Zeitraum haben keine Steigerung und bleiben draußen (statt als 0 % den
    Schnitt zu verwässern).
-2. **Wie oft du im Studio warst.** Mehrere Geräte am selben Tag zählen als
+2. **Wie oft du im Studio warst – in den letzten 7 Tagen.** Bewusst ein
+   kürzeres Fenster als bei den anderen beiden Werten: „war ich diese Woche
+   oft genug da" ist eine Frage an die letzten Tage, während sich eine
+   Steigerung erst über Wochen zeigt. Mehrere Geräte am selben Tag zählen als
    *ein* Besuch.
 3. **Steigerung je Übung in Kilogramm.** Erster gegen letzten Eintrag im
    Zeitraum, größter Zuwachs oben. Antippen öffnet die Übung.
@@ -361,3 +365,31 @@ Zwei Stufen im Menü *⋯*:
   den Einstellungen wieder einblendbar.
 - **Endgültig löschen** – entfernt die Übung samt aller Einträge und Fotos. Die
   Rückfrage nennt vorher die genaue Zahl der betroffenen Einträge.
+
+## Farben der Übungsliste
+
+Die Übungen färben sich danach, was du heute schon geschafft hast:
+
+| Zustand | Standardfarbe |
+| --- | --- |
+| Noch nie eingetragen | hellgrau |
+| Heute noch nicht dran | keine Färbung |
+| Heute 1 Satz | hellorange |
+| Heute 2 Sätze | hellgelb |
+| Heute 3 Sätze oder mehr | hellgrün |
+
+Alle fünf sind unter *Mehr → Farben der Übungsliste* frei wählbar, einzeln
+abschaltbar und über einen Knopf auf die Standardwerte zurückzusetzen.
+
+Der Zustand **„heute noch nicht dran"** war ursprünglich nicht vorgesehen, ist
+aber zu Beginn jeder Einheit der Zustand fast aller Übungen. Ohne ihn hätte
+eine seit Monaten genutzte Übung aussehen müssen wie eine nie benutzte.
+
+Zwei Dinge passieren dabei automatisch:
+
+- **Die Schriftfarbe wird aus der Helligkeit der Hintergrundfarbe berechnet.**
+  Nötig, weil die App standardmäßig dunkel ist – helle Pastelltöne mit heller
+  Schrift wären unlesbar. Das gilt auch für selbst gewählte Farben: ein dunkles
+  Pink bekommt helle Schrift, ein helles Gelb dunkle.
+- **Der Zustand steht zusätzlich im Vorlesetext** der Schaltfläche, damit die
+  Information nicht allein an der Farbe hängt.

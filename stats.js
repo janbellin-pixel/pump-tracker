@@ -31,6 +31,9 @@ export function wochenStart(datum) {
  */
 export const MONAT_TAGE = 30;
 
+/** Fenster für die Besuchszählung – kurzfristiger als die Gewichtsentwicklung. */
+export const BESUCHE_TAGE = 7;
+
 export const ZEITRAEUME = [
   { id: '1m', label: 'Letzter Monat', tage: MONAT_TAGE },
   { id: '3m', label: '3 Monate', tage: 91 },
@@ -207,14 +210,34 @@ export function monatsbilanz(entries, exercises, jetzt = Date.now()) {
   const prozente = mitVergleich.map((f) => ((f.bis - f.von) / f.von) * 100);
   const mittel = prozente.length ? prozente.reduce((a, b) => a + b, 0) / prozente.length : null;
 
-  const besuche = new Set(aktuell.map((e) => tagesSchluessel(e.date))).size;
+  // Die Besuche zählen über ein kürzeres Fenster als die Gewichtsentwicklung:
+  // „war ich diese Woche oft genug da" ist eine Frage an die letzten Tage,
+  // während sich eine Steigerung erst über Wochen zeigt.
+  const grenze7 = jetzt - BESUCHE_TAGE * 86400000;
+  const letzte7 = entries.filter((e) => new Date(e.date).getTime() >= grenze7);
+  const besuche = new Set(letzte7.map((e) => tagesSchluessel(e.date))).size;
 
   return {
     tage: MONAT_TAGE,
+    besucheTage: BESUCHE_TAGE,
     mittlereSteigerungProzent: mittel,
     bewerteteUebungen: mitVergleich.length,
     besuche,
+    besucheEintraege: letzte7.length,
     proUebung,
     eintraege: aktuell.length,
   };
+}
+
+/**
+ * Wie viele Sätze heute je Übung eingetragen sind – Grundlage der Einfärbung
+ * in der Übungsliste. Übungen ohne heutigen Eintrag fehlen in der Map.
+ */
+export function heutigeSaetze(entries, jetzt = Date.now()) {
+  const heute = tagesSchluessel(new Date(jetzt).toISOString());
+  const map = new Map();
+  for (const e of entries) {
+    if (tagesSchluessel(e.date) === heute) map.set(e.exerciseId, e.sets || 0);
+  }
+  return map;
 }

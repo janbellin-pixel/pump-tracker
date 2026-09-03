@@ -1126,7 +1126,9 @@ main {
   height: var(--ic-size);
   flex: none;
   display: block;
-  color: var(--text);
+  /* erbt die Farbe der Karte: auf eingefaerbten Karten waere die feste
+     Textfarbe unsichtbar (helles Symbol auf hellem Pastell). */
+  color: inherit;
 }
 
 .ex-icon svg {
@@ -1384,4 +1386,61 @@ main {
 .sort-btn:active:not([disabled]) {
   background: var(--accent);
   color: var(--accent-ink);
+}
+
+/* ---------- Farbeinstellungen ---------- */
+
+.farb-zeile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+.farb-zeile:first-of-type {
+  border-top: none;
+}
+
+.farb-probe {
+  width: 42px;
+  height: 34px;
+  flex: none;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.farb-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.farb-zeile input[type='color'] {
+  width: 44px;
+  height: 40px;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.farb-an {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 44px;
+  flex: none;
+}
+
+.farb-an input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
 }

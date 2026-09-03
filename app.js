@@ -160,6 +160,83 @@ function promptDialog(title, { value = '', placeholder = '', type = 'text' } = {
   );
 }
 
+/* ---------------- Einfärbung der Übungsschaltflächen ---------------- */
+
+/**
+ * Zustände einer Übung in der Liste und ihre Standardfarben.
+ *
+ * „offen" fehlte in der ursprünglichen Anforderung, ist aber zu Beginn jeder
+ * Einheit der Zustand fast aller Übungen: schon einmal trainiert, heute noch
+ * nicht. Ohne eigenen Zustand hätte er mit „noch nie" zusammenfallen müssen,
+ * und dann sähe eine seit Monaten genutzte Übung aus wie eine unbenutzte.
+ * Standardmäßig bleibt er ungefärbt; einstellbar ist er trotzdem.
+ */
+export const ZUSTAENDE = [
+  { id: 'nie', label: 'Noch nie eingetragen', standard: '#d8dce3' },
+  { id: 'offen', label: 'Heute noch nicht dran', standard: null },
+  { id: 'eins', label: 'Heute 1 Satz', standard: '#ffd7a3' },
+  { id: 'zwei', label: 'Heute 2 Sätze', standard: '#fbeda1' },
+  { id: 'drei', label: 'Heute 3 Sätze oder mehr', standard: '#b5e6ba' },
+];
+
+const FARBEN_KEY = 'liste.farben';
+
+export async function farbenLaden() {
+  const gespeichert = (await db.getMeta(FARBEN_KEY, null)) || {};
+  const farben = {};
+  for (const z of ZUSTAENDE) {
+    farben[z.id] = z.id in gespeichert ? gespeichert[z.id] : z.standard;
+  }
+  return farben;
+}
+
+/** Welchen Zustand hat die Übung gerade? */
+function zustandVon(ex, hatJemals, saetzeHeute) {
+  if (saetzeHeute === undefined) return hatJemals ? 'offen' : 'nie';
+  if (saetzeHeute >= 3) return 'drei';
+  if (saetzeHeute === 2) return 'zwei';
+  if (saetzeHeute >= 1) return 'eins';
+  return 'offen';
+}
+
+/**
+ * Lesbare Schriftfarbe zu einer Hintergrundfarbe.
+ *
+ * Nötig, weil die App standardmäßig dunkel ist: helle Pastelltöne mit der
+ * hellen Standardschrift wären unlesbar. Statt die Farben vorzuschreiben,
+ * wird die Helligkeit ausgerechnet und die Schrift danach gewählt – so
+ * funktioniert auch jede selbst gewählte Farbe.
+ */
+function schriftFarbeFuer(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const kanal = (v) => {
+    const s = v / 255;
+    return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const L =
+    0.2126 * kanal((n >> 16) & 255) + 0.7152 * kanal((n >> 8) & 255) + 0.0722 * kanal(n & 255);
+  return L > 0.45 ? { ink: '#151922', muted: '#5c6577' } : { ink: '#eef1f6', muted: '#98a1b3' };
+}
+
+/** Färbt eine Übungskarte gemäß ihrem Zustand ein. */
+function faerbeKarte(karte, ex, hatJemals, saetzeHeute, farben) {
+  const zustand = zustandVon(ex, hatJemals, saetzeHeute);
+  const farbe = farben[zustand];
+  if (!farbe) return zustand;
+
+  karte.style.background = farbe;
+  karte.style.borderColor = farbe;
+  const schrift = schriftFarbeFuer(farbe);
+  if (schrift) {
+    karte.style.color = schrift.ink;
+    karte.querySelectorAll('.last, .big small').forEach((n) => (n.style.color = schrift.muted));
+    karte.querySelectorAll('.big').forEach((n) => (n.style.color = schrift.ink));
+  }
+  return zustand;
+}
+
 /* ---------------- Übungsbild ---------------- */
 
 /**
@@ -382,6 +459,9 @@ async function viewList() {
     return;
   }
 
+  const [farben, alleEintraege] = await Promise.all([farbenLaden(), db.getAllEntries()]);
+  const saetzeHeute = stats.heutigeSaetze(alleEintraege);
+
   const list = el('div', { class: 'ex-list' });
   for (const ex of exercises) {
     const last = lastMap.get(ex.id);
@@ -389,21 +469,27 @@ async function viewList() {
       ? `${fmtDate(last.date)} · ${last.sets}×${last.reps}${last.pos ? ` · Pos. ${last.pos}` : ''}`
       : 'noch kein Eintrag';
 
-    list.append(
-      el('button', { class: 'ex-card', onclick: () => go(`#/ex/${ex.id}`) }, [
-        exerciseIcon(ex, { size: 40 }),
-        el('span', { class: 'name' }, [
-          document.createTextNode(ex.name),
-          el('span', { class: 'last', text: detail }),
-        ]),
-        last
-          ? el('span', { class: 'big' }, [
-              document.createTextNode(fmtNum(last.weight)),
-              el('small', { text: ' kg' }),
-            ])
-          : el('span', { class: 'big', style: 'color:var(--muted)', text: '–' }),
-      ])
-    );
+    const karte = el('button', { class: 'ex-card', onclick: () => go(`#/ex/${ex.id}`) }, [
+      exerciseIcon(ex, { size: 40 }),
+      el('span', { class: 'name' }, [
+        document.createTextNode(ex.name),
+        el('span', { class: 'last', text: detail }),
+      ]),
+      last
+        ? el('span', { class: 'big' }, [
+            document.createTextNode(fmtNum(last.weight)),
+            el('small', { text: ' kg' }),
+          ])
+        : el('span', { class: 'big', style: 'color:var(--muted)', text: '–' }),
+    ]);
+
+    const zustand = faerbeKarte(karte, ex, Boolean(last), saetzeHeute.get(ex.id), farben);
+    // Die Farbe allein trägt die Information nicht – für Screenreader und für
+    // alle, die Farben schlecht unterscheiden, steht sie zusätzlich im Text.
+    const zLabel = ZUSTAENDE.find((z) => z.id === zustand)?.label;
+    if (zLabel) karte.setAttribute('aria-label', `${ex.name} – ${zLabel}`);
+
+    list.append(karte);
   }
   main.append(list);
 }
@@ -1103,13 +1189,13 @@ async function viewStats() {
 
   const b = stats.monatsbilanz(alleEintraege, uebungen);
 
-  main.append(el('div', { class: 'stats-zeitraum', text: `Die letzten ${b.tage} Tage` }));
+
 
   /* 1) Mittlere prozentuale Steigerung */
   const proz = b.mittlereSteigerungProzent;
   main.append(
     el('div', { class: 'hero' }, [
-      el('div', { class: 'hero-label', text: 'Ø Steigerung der Gewichte' }),
+      el('div', { class: 'hero-label', text: `Ø Steigerung – letzte ${b.tage} Tage` }),
       proz === null
         ? el('div', { class: 'hero-value muted-value', text: '–' })
         : el('div', { class: 'hero-value' }, [
@@ -1126,19 +1212,19 @@ async function viewStats() {
     ])
   );
 
-  /* 2) Studiobesuche */
+  /* 2) Studiobesuche der letzten Woche */
   main.append(
     el('div', { class: 'stat-wide' }, [
       el('div', {}, [
-        el('div', { class: 'stat-label', text: 'Im Studio gewesen' }),
+        el('div', { class: 'stat-label', text: `Im Studio – letzte ${b.besucheTage} Tage` }),
         el('div', {
           class: 'stat-sub',
-          text: `${b.eintraege} ${b.eintraege === 1 ? 'Eintrag' : 'Einträge'} · mehrere Geräte am selben Tag zählen als ein Besuch`,
+          text: `${b.besucheEintraege} ${b.besucheEintraege === 1 ? 'Eintrag' : 'Einträge'} · mehrere Geräte am selben Tag zählen als ein Besuch`,
         }),
       ]),
       el('div', { class: 'stat-wide-value' }, [
         document.createTextNode(String(b.besuche)),
-        el('span', { class: 'stat-wide-unit', text: b.besuche === 1 ? ' Mal' : ' Mal' }),
+        el('span', { class: 'stat-wide-unit', text: ' Mal' }),
       ]),
     ])
   );
@@ -1202,6 +1288,89 @@ async function viewStats() {
       liste,
     ])
   );
+}
+
+/* ---------------- Einstellungen: Farben ---------------- */
+
+async function farbEinstellungen() {
+  const farben = await farbenLaden();
+  const karte = el('div', { class: 'field' });
+
+  karte.append(
+    el('div', {
+      style: 'font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.5',
+      text: 'Die Übungen in der Liste färben sich nach dem, was du heute schon geschafft hast. Die Schriftfarbe passt sich automatisch an die Helligkeit an.',
+    })
+  );
+
+  const speichern = async () => {
+    await db.setMeta(FARBEN_KEY, farben);
+  };
+
+  for (const z of ZUSTAENDE) {
+    const aktiv = farben[z.id] !== null && farben[z.id] !== undefined;
+
+    const probe = el('span', { class: 'farb-probe', text: 'Aa' });
+    const setzeProbe = () => {
+      const f = farben[z.id];
+      if (f) {
+        probe.style.background = f;
+        const s = schriftFarbeFuer(f);
+        probe.style.color = s ? s.ink : 'var(--text)';
+        probe.style.borderColor = f;
+      } else {
+        probe.style.background = 'var(--surface-2)';
+        probe.style.color = 'var(--muted)';
+        probe.style.borderColor = 'var(--line)';
+      }
+    };
+    setzeProbe();
+
+    const waehler = el('input', {
+      type: 'color',
+      value: farben[z.id] || '#cccccc',
+      'aria-label': `Farbe für ${z.label}`,
+    });
+    waehler.addEventListener('input', async () => {
+      farben[z.id] = waehler.value;
+      setzeProbe();
+      an.checked = true;
+      await speichern();
+    });
+
+    // Ohne Häkchen bleibt der Zustand ungefärbt – nötig für „heute noch nicht
+    // dran", wo die normale Kartenfarbe die ruhigste Wahl ist.
+    const an = el('input', { type: 'checkbox', ...(aktiv ? { checked: true } : {}) });
+    an.addEventListener('change', async () => {
+      farben[z.id] = an.checked ? waehler.value : null;
+      setzeProbe();
+      await speichern();
+    });
+
+    karte.append(
+      el('div', { class: 'farb-zeile' }, [
+        probe,
+        el('span', { class: 'farb-label', text: z.label }),
+        waehler,
+        el('label', { class: 'farb-an', title: 'Einfärben' }, [an]),
+      ])
+    );
+  }
+
+  karte.append(
+    el('button', {
+      class: 'secondary',
+      type: 'button',
+      text: '↩  Standardfarben wiederherstellen',
+      onclick: async () => {
+        await db.setMeta(FARBEN_KEY, null);
+        toast('Farben zurückgesetzt');
+        viewSettings();
+      },
+    })
+  );
+
+  return karte;
 }
 
 /* ---------------- Einstellungen: Speicher & Drive ---------------- */
@@ -1403,6 +1572,10 @@ async function viewSettings() {
   const all = await db.getExercises({ includeArchived: true });
   const entries = await db.getAllEntries();
   const archived = all.filter((e) => e.archived);
+
+  /* Farben der Übungsliste */
+  main.append(el('div', { class: 'section-title', text: 'Farben der Übungsliste' }));
+  main.append(await farbEinstellungen());
 
   /* Google Drive */
   main.append(el('div', { class: 'section-title', text: 'Sicherung in Google Drive' }));
