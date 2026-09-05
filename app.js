@@ -1012,6 +1012,9 @@ async function viewSortieren() {
  *   2. Anzahl der Studiobesuche
  *   3. Steigerung je Übung in Kilogramm
  */
+// Gewählter Vergleichszeitraum überlebt den Reiterwechsel innerhalb einer Sitzung.
+let steigerungsModus = 'letztes';
+
 async function viewStats() {
   setTop('Statistik');
 
@@ -1033,15 +1036,33 @@ async function viewStats() {
     return;
   }
 
-  const b = stats.monatsbilanz(alleEintraege, uebungen);
+  /* Eine Filterzeile für die Steigerung – die Besuchszahl bleibt davon unberührt. */
+  const filterZeile = el('div', { class: 'filter-row', role: 'group', 'aria-label': 'Vergleichszeitraum' });
+  for (const m of stats.STEIGERUNG_MODI) {
+    filterZeile.append(
+      el('button', {
+        type: 'button',
+        class: 'filter-chip',
+        'aria-pressed': String(m.id === steigerungsModus),
+        text: m.label,
+        onclick: () => {
+          if (steigerungsModus === m.id) return;
+          steigerungsModus = m.id;
+          viewStats();
+        },
+      })
+    );
+  }
+  main.append(filterZeile);
 
-
+  const modus = stats.STEIGERUNG_MODI.find((m) => m.id === steigerungsModus);
+  const b = stats.bilanz(alleEintraege, uebungen, steigerungsModus);
 
   /* 1) Mittlere prozentuale Steigerung */
   const proz = b.mittlereSteigerungProzent;
   main.append(
     el('div', { class: 'hero' }, [
-      el('div', { class: 'hero-label', text: `Ø Steigerung – letzte ${b.tage} Tage` }),
+      el('div', { class: 'hero-label', text: `Ø Steigerung ${modus.kurz}` }),
       proz === null
         ? el('div', { class: 'hero-value muted-value', text: '–' })
         : el('div', { class: 'hero-value' }, [
@@ -1053,12 +1074,12 @@ async function viewStats() {
         text:
           proz === null
             ? 'Dafür braucht es mindestens zwei Einträge bei derselben Übung.'
-            : `Mittel über ${b.bewerteteUebungen} ${b.bewerteteUebungen === 1 ? 'Übung' : 'Übungen'} mit mindestens zwei Einträgen`,
+            : `Mittel über ${b.bewerteteUebungen} ${b.bewerteteUebungen === 1 ? 'Übung' : 'Übungen'} mit zwei vergleichbaren Einträgen`,
       }),
     ])
   );
 
-  /* 2) Studiobesuche der letzten Woche */
+  /* 2) Studiobesuche der letzten Woche – unabhängig vom gewählten Vergleich */
   main.append(
     el('div', { class: 'stat-wide' }, [
       el('div', {}, [
@@ -1127,8 +1148,8 @@ async function viewStats() {
         el('p', {
           class: 'ch-sub',
           text: b.proUebung.length
-            ? 'Erster gegen letzten Eintrag im letzten Monat, größter Zuwachs oben. Tippen öffnet die Übung.'
-            : 'Im letzten Monat wurde noch nichts eingetragen.',
+            ? `${modus.erklaerung} Größter Zuwachs oben, Tippen öffnet die Übung.`
+            : 'Für diesen Zeitraum gibt es keine Einträge.',
         }),
       ]),
       liste,

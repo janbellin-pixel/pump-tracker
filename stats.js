@@ -201,31 +201,99 @@ export function veraenderung(neu, alt) {
  * Übungen mit nur einem Eintrag im Zeitraum haben keine Steigerung (nicht
  * null Prozent) und bleiben deshalb aus dem Mittel heraus.
  */
-export function monatsbilanz(entries, exercises, jetzt = Date.now()) {
-  const { aktuell } = schneide(entries, '1m', jetzt);
+export const STEIGERUNG_MODI = [
+  {
+    id: 'letztes',
+    label: 'Letztes Training',
+    kurz: 'seit dem letzten Training',
+    erklaerung: 'Die beiden letzten Einträge je Übung im Vergleich – unabhängig davon, wie lange sie auseinanderliegen.',
+  },
+  {
+    id: 'woche',
+    label: 'Letzte Woche',
+    kurz: 'in den letzten 7 Tagen',
+    erklaerung: 'Erster gegen letzten Eintrag innerhalb der letzten 7 Tage.',
+  },
+  {
+    id: 'alles',
+    label: 'Seit Beginn',
+    kurz: 'seit der ersten Aufzeichnung',
+    erklaerung: 'Allererster gegen neuesten Eintrag je Übung.',
+  },
+];
 
-  const proUebung = fortschrittJeUebung(aktuell, exercises);
+/**
+ * Steigerung je Übung, je nach Modus unterschiedlich abgegrenzt.
+ *
+ * „Letztes Training" ist bewusst kein Zeitfenster: verglichen werden die
+ * beiden jüngsten Einträge, auch wenn dazwischen drei Wochen Pause lagen.
+ * Ein 7-Tage-Fenster würde hier daneben liegen, sobald man mal aussetzt.
+ */
+export function steigerungJeUebung(entries, exercises, modus, jetzt = Date.now()) {
+  let basis = entries;
+  if (modus === 'woche') {
+    const grenze = jetzt - 7 * 86400000;
+    basis = entries.filter((e) => new Date(e.date).getTime() >= grenze);
+  }
+
+  const nachId = new Map();
+  for (const e of basis) {
+    if (!nachId.has(e.exerciseId)) nachId.set(e.exerciseId, []);
+    nachId.get(e.exerciseId).push(e);
+  }
+
+  const namen = new Map(exercises.map((x) => [x.id, x.name]));
+  const zeilen = [];
+
+  for (const [id, liste] of nachId) {
+    liste.sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Beim Modus „letztes Training" zählen nur die beiden jüngsten Einträge.
+    const relevant = modus === 'letztes' ? liste.slice(-2) : liste;
+    const erst = relevant[0];
+    const letzt = relevant[relevant.length - 1];
+
+    zeilen.push({
+      id,
+      name: namen.get(id) || 'Gelöschte Übung',
+      werte: relevant.map((e) => e.weight),
+      von: erst.weight,
+      bis: letzt.weight,
+      delta: relevant.length > 1 ? letzt.weight - erst.weight : null,
+      anzahl: relevant.length,
+      zuletzt: new Date(letzt.date).getTime(),
+    });
+  }
+
+  zeilen.sort((a, b) => {
+    if (a.delta === null && b.delta === null) return b.zuletzt - a.zuletzt;
+    if (a.delta === null) return 1;
+    if (b.delta === null) return -1;
+    return b.delta - a.delta;
+  });
+  return zeilen;
+}
+
+/** Die drei Werte der Statistik für den gewählten Steigerungs-Modus. */
+export function bilanz(entries, exercises, modus = 'letztes', jetzt = Date.now()) {
+  const proUebung = steigerungJeUebung(entries, exercises, modus, jetzt);
   const mitVergleich = proUebung.filter((f) => f.delta !== null && f.von > 0);
 
   const prozente = mitVergleich.map((f) => ((f.bis - f.von) / f.von) * 100);
   const mittel = prozente.length ? prozente.reduce((a, b) => a + b, 0) / prozente.length : null;
 
-  // Die Besuche zählen über ein kürzeres Fenster als die Gewichtsentwicklung:
-  // „war ich diese Woche oft genug da" ist eine Frage an die letzten Tage,
-  // während sich eine Steigerung erst über Wochen zeigt.
+  // Die Besuche bleiben bei 7 Tagen, unabhängig vom Steigerungs-Modus:
+  // „war ich diese Woche oft genug da" ist eine eigene Frage.
   const grenze7 = jetzt - BESUCHE_TAGE * 86400000;
   const letzte7 = entries.filter((e) => new Date(e.date).getTime() >= grenze7);
-  const besuche = new Set(letzte7.map((e) => tagesSchluessel(e.date))).size;
 
   return {
-    tage: MONAT_TAGE,
+    modus,
     besucheTage: BESUCHE_TAGE,
     mittlereSteigerungProzent: mittel,
     bewerteteUebungen: mitVergleich.length,
-    besuche,
+    besuche: new Set(letzte7.map((e) => tagesSchluessel(e.date))).size,
     besucheEintraege: letzte7.length,
     proUebung,
-    eintraege: aktuell.length,
   };
 }
 

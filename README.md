@@ -27,27 +27,27 @@ Unten sitzt eine Reiterleiste mit **Übungen · Statistik · Mehr**.
 
 ## Der Statistik-Reiter
 
-Bewusst nur **drei Werte**. Der Zeitraum steht jeweils direkt am Wert – die
-Besuchszählung läuft über ein kürzeres Fenster als die beiden anderen:
+Drei Werte, mit einem Umschalter für den Vergleichszeitraum:
 
-1. **Ø Steigerung der Gewichte in Prozent.** Gemittelt wird über die *Übungen*,
-   nicht über die Einträge – sonst zöge ein Gerät, an dem du zehnmal warst, den
-   Schnitt gegen eines, an dem du zweimal warst. Übungen mit nur einem Eintrag
-   im Zeitraum haben keine Steigerung und bleiben draußen (statt als 0 % den
-   Schnitt zu verwässern).
-2. **Wie oft du im Studio warst – in den letzten 7 Tagen.** Bewusst ein
-   kürzeres Fenster als bei den anderen beiden Werten: „war ich diese Woche
-   oft genug da" ist eine Frage an die letzten Tage, während sich eine
-   Steigerung erst über Wochen zeigt. Mehrere Geräte am selben Tag zählen als
-   *ein* Besuch.
-3. **Steigerung je Übung in Kilogramm.** Erster gegen letzten Eintrag im
-   Zeitraum, größter Zuwachs oben. Antippen öffnet die Übung.
+| Modus | Was verglichen wird |
+| --- | --- |
+| **Letztes Training** | die beiden jüngsten Einträge je Übung |
+| **Letzte Woche** | erster gegen letzten Eintrag der letzten 7 Tage |
+| **Seit Beginn** | allererster gegen neuesten Eintrag |
 
-„Letzter Monat“ heißt die vergangenen 30 Tage, nicht der Kalendermonat davor –
-am 2. eines Monats wäre der sonst fast leer.
+„Letztes Training" ist bewusst **kein Zeitfenster**: verglichen werden die
+beiden jüngsten Einträge, auch wenn drei Wochen Pause dazwischenliegen. Ein
+7-Tage-Fenster läge hier daneben, sobald man einmal aussetzt.
 
-Der Verlauf je Übung mit Diagramm und Tabelle steckt weiterhin auf der
-jeweiligen Übungsseite unter „Verlauf“.
+Die drei Werte:
+
+1. **Ø Steigerung in Prozent.** Gemittelt wird über die *Übungen*, nicht über
+   die Einträge – sonst zöge ein Gerät, an dem du zehnmal warst, den Schnitt
+   gegen eines mit zwei Besuchen. Übungen ohne zweiten Eintrag im gewählten
+   Zeitraum bleiben draußen, statt als 0 % zu verwässern.
+2. **Wie oft du im Studio warst – letzte 7 Tage.** Bleibt vom Umschalter
+   unberührt: „war ich diese Woche oft genug da" ist eine eigene Frage.
+3. **Steigerung je Übung in Kilogramm**, größter Zuwachs oben.
 
 ## Wichtig: Doppelklick auf index.html funktioniert nicht
 

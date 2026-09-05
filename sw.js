@@ -2,7 +2,7 @@
  * Offline-Cache. Bei jeder Änderung an den Dateien CACHE hochzählen –
  * sonst behält das Handy die alte Version.
  */
-const CACHE = 'pump-tracker-v13';
+const CACHE = 'pump-tracker-v14';
 
 const ASSETS = [
   './',
