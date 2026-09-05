@@ -1444,3 +1444,43 @@ main {
   height: 20px;
   accent-color: var(--accent);
 }
+
+/* ---------- Abschlussbildschirm nach dem Sichern ---------- */
+
+.ende {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.ende-haken {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: var(--good);
+  color: var(--bg);
+  font-size: 42px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.ende h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+
+.ende p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 320px;
+}

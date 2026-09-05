@@ -89,6 +89,74 @@ export async function anmeldungGueltigBis() {
   return token ? token.laeuftAb : null;
 }
 
+/**
+ * Anmeldung beim Start vorbereiten.
+ *
+ * Zwei Gründe, warum das nicht erst beim Knopfdruck passieren darf:
+ *
+ * 1. Ein Anmeldefenster darf nur direkt aus einer Nutzergeste heraus geöffnet
+ *    werden, und diese Erlaubnis verfällt nach wenigen Sekunden. Wenn erst
+ *    beim Klick das Google-Skript aus dem Netz geladen wird, ist sie längst
+ *    abgelaufen und der Browser blockiert das Fenster – das Speichern
+ *    scheiterte dann scheinbar grundlos.
+ * 2. Die stille Erneuerung kostet nichts und läuft ohne sichtbares Fenster.
+ *    Wenn sie beim Start klappt, ist bis zum Ende des Trainings Ruhe.
+ */
+export async function vorbereiten(clientId) {
+  if (!clientId) return false;
+  await tokenAusSpeicher();
+  if (angemeldet()) return true;
+  try {
+    await tokenClientHolen(clientId); // lädt das Skript vor
+    const t = await tokenBesorgen(clientId, { interaktiv: false });
+    return Boolean(t);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Anmeldefenster öffnen. **Muss direkt aus einem Klick aufgerufen werden**,
+ * ohne vorheriges `await` – sonst blockiert der Browser das Fenster.
+ */
+export function anmeldenJetzt(clientId) {
+  /*
+   * Ist der Anmeldedienst noch nicht geladen – etwa weil beim Start kein Netz
+   * da war –, wird er jetzt nachgeladen. Das Anmeldefenster blockiert der
+   * Browser dann meist, weil die Erlaubnis aus dem Klick über das Laden
+   * verfällt. Deshalb die klare Ansage, dass ein zweiter Tipp genügt: dann ist
+   * alles bereit. Einfach abzubrechen hieße, dass der Knopf gar nichts tut.
+   */
+  if (!tokenClient || clientIdAktiv !== clientId) {
+    return tokenClientHolen(clientId).then(() => {
+      throw new Error('Anmeldung war noch nicht bereit – bitte nochmal tippen.');
+    });
+  }
+  return new Promise((resolve, reject) => {
+    let fertig = false;
+    tokenClient.callback = (resp) => {
+      if (fertig) return;
+      fertig = true;
+      if (resp && resp.access_token) {
+        token = {
+          wert: resp.access_token,
+          laeuftAb: laufzeit.jetzt() + (Number(resp.expires_in) || 3600) * 1000,
+        };
+        db.setMeta(TOKEN_KEY, token).catch(() => {});
+        resolve(token.wert);
+      } else {
+        reject(new Error(resp?.error || 'Anmeldung abgebrochen'));
+      }
+    };
+    tokenClient.error_callback = (err) => {
+      if (fertig) return;
+      fertig = true;
+      reject(new Error(err?.type || 'Anmeldung fehlgeschlagen'));
+    };
+    tokenClient.requestAccessToken({ prompt: '' });
+  });
+}
+
 async function tokenClientHolen(clientId) {
   if (tokenClient && clientIdAktiv === clientId) return tokenClient;
   await laufzeit.ladeSkript(GIS_SRC);

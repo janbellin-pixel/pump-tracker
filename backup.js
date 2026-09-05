@@ -17,7 +17,6 @@ export const SCHLUESSEL = {
   ordnerName: 'drive.ordnerName',
   dateiId: 'drive.dateiId',
   auto: 'drive.auto',
-  mitFotos: 'drive.mitFotos',
   letzteSicherung: 'drive.letzteSicherung',
   gesicherteRevision: 'drive.gesicherteRevision',
   offen: 'drive.offen', // ein Versuch wurde angefangen, aber nicht bestätigt
@@ -26,7 +25,7 @@ export const SCHLUESSEL = {
 };
 
 export async function einstellungen() {
-  const [clientId, apiKey, ordnerId, ordnerName, dateiId, auto, mitFotos, letzteSicherung, gesicherteRevision, offen] =
+  const [clientId, apiKey, ordnerId, ordnerName, dateiId, auto, letzteSicherung, gesicherteRevision, offen] =
     await Promise.all([
       db.getMeta(SCHLUESSEL.clientId, ''),
       db.getMeta(SCHLUESSEL.apiKey, ''),
@@ -34,12 +33,11 @@ export async function einstellungen() {
       db.getMeta(SCHLUESSEL.ordnerName, ''),
       db.getMeta(SCHLUESSEL.dateiId, ''),
       db.getMeta(SCHLUESSEL.auto, true),
-      db.getMeta(SCHLUESSEL.mitFotos, true),
       db.getMeta(SCHLUESSEL.letzteSicherung, null),
       db.getMeta(SCHLUESSEL.gesicherteRevision, -1),
       db.getMeta(SCHLUESSEL.offen, false),
     ]);
-  return { clientId, apiKey, ordnerId, ordnerName, dateiId, auto, mitFotos, letzteSicherung, gesicherteRevision, offen };
+  return { clientId, apiKey, ordnerId, ordnerName, dateiId, auto, letzteSicherung, gesicherteRevision, offen };
 }
 
 export const eingerichtet = (e) => Boolean(e.clientId && e.ordnerId);
@@ -76,7 +74,7 @@ export async function sichern({ interaktiv = false } = {}) {
   await db.setMeta(SCHLUESSEL.offen, true);
 
   try {
-    const daten = await db.exportAll({ includePhotos: e.mitFotos });
+    const daten = await db.exportAll();
     const inhalt = JSON.stringify(daten);
 
     let dateiId = e.dateiId;

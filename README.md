@@ -18,31 +18,12 @@ dem Handy.
 - Die **+/− Knöpfe springen im Raster des Gewichtsstapels** – voreingestellt
   4,5 kg (10-lbs-Platten, passend zu den Werten auf dem Trainingsplan). Pro
   Übung im Menü *⋯* umstellbar. Die Zahl lässt sich auch direkt eintippen.
-- **Foto der Geräteeinstellung** pro Eintrag, mit Zahlenerkennung: erkannte
-  Zahlen erscheinen als Knöpfe, ein Tap setzt sie als Gewicht oder Position ein.
+- Jede Übung hat ein **schematisches Symbol**, über den Namen zugeordnet.
 - Verlauf je Übung mit Diagramm.
 - **Reiter „Statistik“** mit der Auswertung über die Zeit (siehe unten).
-- Backup als JSON, mit oder ohne Fotos.
+- Backup als JSON.
 
 Unten sitzt eine Reiterleiste mit **Übungen · Statistik · Mehr**.
-
-## Bilder für die Übungen
-
-Jede Übung hat links ein Bild:
-
-- Die 14 Geräte vom Trainingsplan haben ein **schematisches Symbol** –
-  Körperhaltung plus Bewegungspfeil. Die Richtung trägt dabei die Aussage,
-  nicht die Maschine: Butterfly und Butterfly Reverse sehen als Gerät fast
-  gleich aus, deshalb unterscheiden sich Armhaltung und Pfeilrichtung deutlich.
-  Dasselbe gilt für Abduktoren (Beine weit) und Adduktoren (Beine eng).
-- **Eigene Bilder** gehen für jede Übung: *⋯ → Eigenes Bild wählen*, entweder
-  frisch fotografiert oder aus der Galerie. Beim Anlegen einer neuen Übung
-  fragt die App direkt danach. Über *Zurück zum Symbol* kommt das Piktogramm
-  wieder.
-- Neue Übungen, die wie ein bekanntes Gerät heißen, bekommen dessen Symbol
-  automatisch. Alle anderen ein Hantelsymbol.
-
-Bilder werden auf 320 px verkleinert gespeichert und landen mit im Backup.
 
 ## Der Statistik-Reiter
 
@@ -119,28 +100,6 @@ offline nutzen geht so aber nicht, weil es kein HTTPS ist.
 
 Netlify, Cloudflare Pages, Vercel, ein eigener Webspace: einfach den Ordner
 hochladen. Es gibt keinen Build-Schritt, keine Abhängigkeiten.
-
-## Die Zahlenerkennung im Foto
-
-Zwei Wege, automatisch gewählt:
-
-1. **Im Browser eingebaut** (`TextDetector`). Chrome für Android bringt das in
-   der Regel mit; es läuft offline und braucht ein bis zwei Sekunden.
-2. **Tesseract.js**, wird bei Bedarf aus dem Netz nachgeladen (~2 MB, danach
-   gecacht). Nur als Rückfall, wenn Weg 1 fehlt – und **deutlich langsamer**:
-   im Test rund 50 Sekunden für ein Foto. Nach 60 Sekunden bricht die App ab.
-
-Welcher Weg auf deinem Handy aktiv ist, steht unten in den *Einstellungen*.
-Wenn dort der Rückfall angezeigt wird, lohnt sich das Fotografieren nur als
-Gedächtnisstütze – auf die Erkennung willst du dann nicht warten.
-
-Realistisch bleibt das eine Abkürzung, keine Automatik: Zahlen an
-Gewichtsstapeln sind klein, oft schräg fotografiert, gestanzt statt gedruckt
-und schlecht beleuchtet. Die App rät deshalb nie still vor sich hin, sondern
-zeigt die gefundenen Zahlen als Knöpfe an – du tippst die richtige an. Wird
-nichts erkannt, stellst du das Gewicht mit +/− ein; **das Foto wird in jedem
-Fall gespeichert** und beim nächsten Mal im Verlauf angezeigt. Genau dafür ist
-es vor allem gut: die Sitzposition wiederzufinden.
 
 ## Sicherung in Google Drive
 
@@ -228,7 +187,6 @@ Sicherung und ob etwas offen ist.
   geändert hat. Bloßes Nachschauen kostet kein Datenvolumen.
 - Bricht der Upload ab (Funkloch, App eingefroren), bleibt ein Merker stehen
   und der nächste Start holt es nach.
-- „Fotos mitsichern“ lässt sich abschalten, wenn dir die Datei zu groß wird.
 
 ### Auf einem zweiten Gerät
 
@@ -260,13 +218,12 @@ unterschiedlich sind. Ein Backup zweimal einzuspielen ändert deshalb nichts.
 | --- | --- |
 | `index.html` | Gerüst |
 | `app.js` | Oberfläche, Router, Reiter, Eingabelogik |
-| `db.js` | IndexedDB: Übungen, Einträge, Fotos, Export/Import |
+| `db.js` | IndexedDB: Übungen, Einträge, Export/Import |
 | `stats.js` | Auswertung: Volumen, Einheiten, Wochen, Fortschritt (nur Rechnen) |
 | `charts.js` | Diagramm-Bausteine: Kurve, Säulen, Mini-Kurve, Tabellenansicht |
 | `drive.js` | Google: Anmeldung, Ordnerauswahl, Datei lesen und schreiben |
 | `backup.js` | Wann gesichert wird, Nachholen abgebrochener Versuche |
 | `exercise-icons.js` | Die schematischen Gerätesymbole |
-| `ocr.js` | Foto verkleinern, Zahlen erkennen und bewerten |
 | `styles.css` | Gestaltung, hell und dunkel |
 | `sw.js` | Offline-Cache |
 | `manifest.webmanifest` | Name, Farben, Icons fürs Installieren |
@@ -354,7 +311,7 @@ behalten ihr Hantelsymbol.
 
 Deshalb bei jeder Erweiterung der Sammlung `DB_VERSION` in `db.js` hochzählen.
 Dann läuft beim nächsten Start die Zuordnung erneut über alle Übungen, die auf
-`standard` stehen. Bereits zugeordnete Symbole und eigene Fotos bleiben dabei
+`standard` stehen. Bereits zugeordnete Symbole bleiben dabei
 unangetastet.
 
 ## Übungen löschen
@@ -363,7 +320,7 @@ Zwei Stufen im Menü *⋯*:
 
 - **Ausblenden** – verschwindet aus der Liste, Einträge bleiben, jederzeit in
   den Einstellungen wieder einblendbar.
-- **Endgültig löschen** – entfernt die Übung samt aller Einträge und Fotos. Die
+- **Endgültig löschen** – entfernt die Übung samt aller Einträge. Die
   Rückfrage nennt vorher die genaue Zahl der betroffenen Einträge.
 
 ## Farben der Übungsliste
@@ -393,3 +350,51 @@ Zwei Dinge passieren dabei automatisch:
   Pink bekommt helle Schrift, ein helles Gelb dunkle.
 - **Der Zustand steht zusätzlich im Vorlesetext** der Schaltfläche, damit die
   Information nicht allein an der Farbe hängt.
+
+## Ablauf im Studio
+
+Pro Übung gibt es zwei Knöpfe:
+
+- **＋ Satz speichern** – der Knopf für das Training. Er zählt die Sätze um eins
+  hoch, speichert und schließt die Übung. Die Karte in der Liste wandert damit
+  von orange (1 Satz) über gelb (2) nach grün (3 oder mehr).
+- **Werte korrigieren** – speichert genau die Zahl, die im Feld *Sätze* steht.
+  Für den Fall, dass man sich verzählt hat.
+
+Zu Beginn eines Tages steht die Satzzählung jeder Übung auf **0**. Gewicht und
+Wiederholungen kommen weiterhin vom letzten Mal.
+
+Am Ende: **✓ Speichern & schließen** oben auf der Übungsliste.
+
+## Anmeldung bei Google
+
+Das Zugangstoken gilt rund eine Stunde und wird gespeichert – innerhalb dieser
+Zeit ist keine Anmeldung nötig, auch nicht nach einem Neustart der App.
+
+Beim Start lädt die App den Google-Anmeldedienst vor und versucht eine stille
+Erneuerung. **Das ist der Grund, warum das Speichern vorher oft scheiterte:**
+Ein Anmeldefenster darf nur direkt aus einem Fingertipp heraus geöffnet werden,
+und diese Erlaubnis verfällt nach wenigen Sekunden. Wurde erst beim Tippen das
+Google-Skript aus dem Netz geladen, war sie abgelaufen und der Browser
+blockierte das Fenster – ohne erkennbaren Grund.
+
+Ist keine gültige Anmeldung da, heißt der Knopf **„🔑 Anmelden & speichern"**
+und öffnet das Anmeldefenster als allererstes, ohne vorherige Datenbankzugriffe.
+
+Ein dauerhaftes Anmelden „über Tage" gibt Google Browser-Apps nicht: das
+Refresh-Token, das das ermöglichen würde, bekommen nur Server. Solange du in
+Chrome bei Google angemeldet bleibst, sollte die stille Erneuerung aber greifen.
+
+## Schließen
+
+**✓ Speichern & schließen** sichert und versucht danach, die App zu beenden.
+Ob das gelingt, entscheidet der Browser: `window.close()` verweigert eine
+Seite, die nicht per Skript geöffnet wurde. Im Test hier funktionierte es, auf
+einer installierten Web-App unter Android häufig nicht.
+
+Bleibt das Fenster offen, tritt ein Abschlussbildschirm an die Stelle der App –
+grüner Haken, „Gesichert", und der Hinweis, dass man jetzt gefahrlos gehen
+kann. Ein Knopf führt zurück ins Training.
+
+Das automatische Sichern beim Wegschalten ist entfallen: es lief unzuverlässig
+und der zugehörige Schalter versprach mehr, als er hielt.

@@ -5,7 +5,7 @@ import * as reihenfolge from './reihenfolge.js';
 import * as backup from './backup.js';
 import * as drive from './drive.js';
 import { ICONS, iconFuerName } from './exercise-icons.js';
-import { shrinkImage, readNumbersFromImage, ocrStatus } from './ocr.js';
+
 
 // Quittung an den Hinweis in index.html: alle Module sind da. Bleibt sie aus –
 // etwa weil die Seite per file:// geöffnet wurde und Chrome das Nachladen
@@ -239,66 +239,16 @@ function faerbeKarte(karte, ex, hatJemals, saetzeHeute, farben) {
 
 /* ---------------- Übungsbild ---------------- */
 
-/**
- * Bild einer Übung: eigenes Foto, sonst das schematische Symbol.
- *
- * Das Foto wird nachgeladen, weil es als Blob in der Datenbank liegt – bis es
- * da ist, steht schon das Symbol an seiner Stelle. Dadurch springt das Layout
- * nicht, und ohne Foto ist ohnehin sofort alles fertig.
- */
+/** Schematisches Symbol einer Übung. */
 function exerciseIcon(ex, { size = 40 } = {}) {
   const box = el('span', { class: 'ex-icon', style: `--ic-size:${size}px` });
   box.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">${
     ICONS[ex.icon] || ICONS.standard
   }</svg>`;
-
-  if (ex.iconPhotoId) {
-    db.getPhoto(ex.iconPhotoId).then((blob) => {
-      if (!blob) return;
-      box.replaceChildren(el('img', { src: objectUrl(blob), alt: '', loading: 'lazy' }));
-      box.classList.add('foto');
-    });
-  }
   return box;
 }
 
 /** Bild für eine Übung aufnehmen oder aus der Galerie wählen. */
-function bildWaehlen() {
-  return new Promise((resolve) => {
-    const input = el('input', {
-      type: 'file',
-      accept: 'image/*',
-      style: 'display:none',
-    });
-    let fertig = false;
-    input.addEventListener('change', async () => {
-      fertig = true;
-      const f = input.files && input.files[0];
-      input.remove();
-      if (!f) return resolve(null);
-      try {
-        // Klein halten: das Bild wird nie größer als 160 px dargestellt.
-        resolve(await shrinkImage(f, 320, 0.7));
-      } catch {
-        toast('Bild konnte nicht gelesen werden.');
-        resolve(null);
-      }
-    });
-    // Bricht der Nutzer den Systemdialog ab, kommt kein change-Ereignis.
-    window.addEventListener(
-      'focus',
-      () => setTimeout(() => {
-        if (!fertig) {
-          input.remove();
-          resolve(null);
-        }
-      }, 800),
-      { once: true }
-    );
-    document.body.append(input);
-    input.click();
-  });
-}
 
 /* ---------------- Stepper-Baustein ---------------- */
 
@@ -384,7 +334,7 @@ async function sicherungsLeiste() {
   if (!backup.eingerichtet(e)) return document.createDocumentFragment();
 
   const arbeit = await backup.offeneArbeit();
-  const gueltigBis = await drive.anmeldungGueltigBis();
+  const angemeldet = drive.angemeldet();
 
   const box = el('div', { class: 'save-bar' + (arbeit.noetig ? ' offen' : '') });
 
@@ -400,42 +350,91 @@ async function sicherungsLeiste() {
         class: 'save-status ' + (arbeit.noetig ? 'offen' : 'ok'),
         text: arbeit.noetig ? 'Noch nicht gesichert' : 'Gesichert',
       }),
-      el('div', { class: 'save-sub', text: `zuletzt ${wann}` }),
+      el('div', {
+        class: 'save-sub',
+        text: angemeldet ? `zuletzt ${wann}` : 'bei Google abgemeldet',
+      }),
     ])
   );
 
   const knopf = el('button', {
     class: 'save-btn',
     type: 'button',
-    text: arbeit.noetig ? '☁ Training abschließen' : '☁ Erneut sichern',
+    text: angemeldet ? '✓ Speichern & schließen' : '🔑 Anmelden & speichern',
   });
-  knopf.addEventListener('click', async () => {
+
+  /*
+   * Wichtig: Ist keine gültige Anmeldung da, wird das Anmeldefenster als
+   * ALLERERSTES geöffnet – ohne vorheriges `await`. Die Erlaubnis des Browsers,
+   * ein Fenster zu öffnen, hängt am Klick und verfällt nach wenigen Sekunden;
+   * jede Datenbankabfrage davor kann sie kosten. Genau daran scheiterte das
+   * Speichern bisher scheinbar grundlos.
+   */
+  knopf.addEventListener('click', (ereignis) => {
+    const anmeldung = drive.angemeldet()
+      ? Promise.resolve(true)
+      : drive.anmeldenJetzt(e.clientId);
+
     knopf.disabled = true;
-    knopf.textContent = '☁ Sichere …';
-    const res = await backup.sichern({ interaktiv: true });
-    if (res.ok) {
-      haptic(30);
-      toast('Gesichert – du kannst die App jetzt weglegen', 3500);
-      viewList();
-    } else {
-      knopf.disabled = false;
-      knopf.textContent = '☁ Nochmal versuchen';
-      toast(`Sicherung fehlgeschlagen: ${res.grund}`, 5000);
-    }
+    knopf.textContent = drive.angemeldet() ? '☁ Sichere …' : '🔑 Anmeldung läuft …';
+
+    anmeldung
+      .then(() => backup.sichern({ interaktiv: false }))
+      .then((res) => {
+        if (!res.ok) throw new Error(res.grund || 'unbekannt');
+        haptic(30);
+        return appBeenden();
+      })
+      .catch((err) => {
+        knopf.disabled = false;
+        knopf.textContent = '↻ Nochmal versuchen';
+        toast(`Nicht gesichert: ${err.message}`, 5000);
+      });
   });
   box.append(knopf);
 
-  // Anmeldung läuft bald ab – lieber vorher sagen als beim Sichern scheitern.
-  if (gueltigBis && gueltigBis < Date.now()) {
-    box.append(
-      el('div', {
-        class: 'save-hint',
-        text: 'Google-Anmeldung abgelaufen – beim nächsten Sichern einmal bestätigen.',
-      })
-    );
+  return box;
+}
+
+/**
+ * App nach dem Sichern beenden.
+ *
+ * `window.close()` gelingt bei einer installierten Web-App nicht zuverlässig –
+ * der Browser lässt eine Seite, die er selbst geöffnet hat, in der Regel nicht
+ * sich selbst schließen. Deshalb wird es versucht, und für den Fall, dass das
+ * Fenster offen bleibt, tritt ein Abschlussbildschirm an seine Stelle: die App
+ * ist dann sichtbar fertig, auch wenn Android sie noch anzeigt.
+ */
+function appBeenden() {
+  try {
+    window.close();
+  } catch {
+    /* erwartbar */
   }
 
-  return box;
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      if (window.closed) return resolve();
+
+      document.body.replaceChildren(
+        el('div', { class: 'ende' }, [
+          el('div', { class: 'ende-haken', text: '✓' }),
+          el('h2', { text: 'Gesichert' }),
+          el('p', {
+            text: 'Deine Einträge liegen in Google Drive. Du kannst die App jetzt schließen – über die Zurück-Geste oder aus der Übersicht der offenen Apps.',
+          }),
+          el('button', {
+            class: 'primary',
+            type: 'button',
+            style: 'max-width:280px',
+            text: 'Weiter trainieren',
+            onclick: () => location.reload(),
+          }),
+        ])
+      );
+      resolve();
+    }, 400);
+  });
 }
 
 /* ---------------- Ansicht: Übungsliste ---------------- */
@@ -501,18 +500,12 @@ async function addExerciseFlow() {
   const ex = await db.addExercise(name);
 
   // Bild direkt anbieten – hinterher sucht es kaum jemand im Menü.
-  const mitBild = await confirmDialog(
-    `„${ex.name}“ angelegt`,
-    'Möchtest du ein Bild dafür aufnehmen oder aus der Galerie wählen? Ohne Bild bekommt die Übung ein Hantelsymbol.',
-    'Bild wählen'
+  toast(
+    ex.icon === 'standard'
+      ? `„${ex.name}“ angelegt – kein passendes Symbol gefunden`
+      : `„${ex.name}“ angelegt`,
+    3000
   );
-  if (mitBild) {
-    const blob = await bildWaehlen();
-    if (blob) {
-      const photoId = await db.savePhoto(blob);
-      await db.saveExercise({ ...ex, iconPhotoId: photoId });
-    }
-  }
   go(`#/ex/${ex.id}`);
 }
 
@@ -551,10 +544,12 @@ async function viewEntry(exId) {
   const draft = {
     weight: vorlage ? vorlage.weight : step * 4,
     reps: vorlage ? vorlage.reps : 12,
-    sets: vorlage ? vorlage.sets : 3,
+    // Zu Beginn eines Tages steht die Satzzählung auf 0 – „Satz speichern"
+    // zählt sie hoch. Wiederholungen und Gewicht kommen weiter vom letzten Mal.
+    sets: heute ? heute.sets || 0 : 0,
     pos: vorlage ? vorlage.pos : 0,
     note: heute ? heute.note || '' : '',
-    photoBlob: null,
+
   };
 
   /* --- Gewicht --- */
@@ -624,149 +619,6 @@ async function viewEntry(exId) {
     smallField('Pos.', posStepper),
   ]);
 
-  /* --- Foto + OCR --- */
-  const fileInput = el('input', {
-    type: 'file',
-    accept: 'image/*',
-    capture: 'environment',
-    style: 'display:none',
-  });
-
-  const thumbSlot = el('span');
-  const ocrSlot = el('div', { class: 'ocr', style: 'display:none' });
-
-  const photoBtn = el('button', { class: 'photo-btn', type: 'button' }, [
-    document.createTextNode('📷  Einstellung fotografieren'),
-  ]);
-  photoBtn.addEventListener('click', () => fileInput.click());
-
-  let ocrTarget = 'weight';
-
-  const applyNumber = (n) => {
-    haptic(18);
-    if (ocrTarget === 'weight') {
-      weightStepper.set(n);
-      draft.weight = n;
-      toast(`Gewicht: ${fmtNum(n)} kg`);
-    } else {
-      posStepper.set(Math.round(n));
-      draft.pos = Math.round(n);
-      toast(`Position: ${Math.round(n)}`);
-    }
-  };
-
-  const renderOcr = (result) => {
-    ocrSlot.replaceChildren();
-    ocrSlot.style.display = '';
-
-    if (result.pending) {
-      ocrSlot.append(
-        el('div', { style: 'color:var(--muted);font-size:14px' }, [
-          el('span', { class: 'spinner' }),
-          document.createTextNode('  ' + (result.status || 'Zahlen werden gesucht …')),
-        ])
-      );
-      return;
-    }
-
-    if (!result.all.length) {
-      ocrSlot.append(
-        el('div', {
-          style: 'color:var(--muted);font-size:13px',
-          text: result.error
-            ? `Keine Erkennung möglich: ${result.error}`
-            : 'Keine Zahlen erkannt – Werte bitte per +/− einstellen. Das Foto ist gespeichert.',
-        })
-      );
-      return;
-    }
-
-    const targetRow = el('div', { class: 'ocr-target' });
-    const mkTarget = (key, label) => {
-      const b = el('button', {
-        type: 'button',
-        text: label,
-        'aria-pressed': ocrTarget === key,
-        onclick: () => {
-          ocrTarget = key;
-          [...targetRow.children].forEach((c) =>
-            c.setAttribute('aria-pressed', c === b ? 'true' : 'false')
-          );
-        },
-      });
-      return b;
-    };
-    targetRow.append(mkTarget('weight', 'einsetzen als Gewicht'), mkTarget('pos', 'als Pos.'));
-
-    const chips = el('div', { class: 'chips' });
-    for (const n of result.all.slice(0, 8)) {
-      chips.append(
-        el('button', {
-          type: 'button',
-          class: 'chip' + (n === result.weight ? ' best' : ''),
-          text: fmtNum(n),
-          onclick: () => applyNumber(n),
-        })
-      );
-    }
-
-    ocrSlot.append(
-      el('div', {
-        style: 'font-size:12px;color:var(--muted);margin-bottom:8px',
-        text: `Erkannte Zahlen (${result.engine}) – antippen zum Übernehmen:`,
-      }),
-      targetRow,
-      chips
-    );
-  };
-
-  const clearPhoto = () => {
-    draft.photoBlob = null;
-    thumbSlot.replaceChildren();
-    ocrSlot.style.display = 'none';
-    ocrSlot.replaceChildren();
-    fileInput.value = '';
-  };
-
-  fileInput.addEventListener('change', async () => {
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) return;
-    try {
-      const small = await shrinkImage(file);
-      draft.photoBlob = small;
-
-      thumbSlot.replaceChildren(
-        el('span', { class: 'photo-thumb' }, [
-          el('img', { src: objectUrl(small), alt: 'Foto der Einstellung' }),
-          el('button', { class: 'x', type: 'button', text: '×', 'aria-label': 'Foto entfernen', onclick: clearPhoto }),
-        ])
-      );
-
-      renderOcr({ pending: true, all: [] });
-      const result = await readNumbersFromImage(file, {
-        weightStep: step,
-        onProgress: (status, progress) => {
-          const label =
-            status === 'recognizing text'
-              ? `Zahlen werden gesucht … ${Math.round((progress || 0) * 100)} %`
-              : 'Erkennung wird geladen …';
-          renderOcr({ pending: true, all: [], status: label });
-        },
-      });
-      renderOcr(result);
-      if (result.weight != null) haptic(25);
-    } catch (err) {
-      toast('Foto konnte nicht verarbeitet werden.');
-      console.error(err);
-    }
-  });
-
-  const photoField = el('div', { class: 'field' }, [
-    el('div', { class: 'photo-row' }, [photoBtn, thumbSlot]),
-    ocrSlot,
-    fileInput,
-  ]);
-
   /* --- Notiz --- */
   const noteInput = el('textarea', {
     class: 'note',
@@ -789,27 +641,24 @@ async function viewEntry(exId) {
     type: 'button',
     text: heute ? 'Heutigen Eintrag aktualisieren' : 'Speichern',
   });
+  /** Schreibt den heutigen Eintrag; `saetze` überschreibt den Formularwert. */
+  const eintragSchreiben = async (saetze) => {
+    await db.saveEntry({
+      id: heute ? heute.id : undefined, // gleiche ID = überschreiben
+      exerciseId: ex.id,
+      date: new Date().toISOString(),
+      weight: draft.weight,
+      reps: draft.reps,
+      sets: saetze,
+      pos: draft.pos || 0,
+      note: draft.note.trim(),
+    });
+  };
+
   saveBtn.addEventListener('click', async () => {
     saveBtn.disabled = true;
     try {
-      // Foto: ein neues ersetzt das alte, sonst bleibt das vorhandene stehen.
-      let photoId = heute ? heute.photoId || null : null;
-      if (draft.photoBlob) {
-        if (photoId) await db.deletePhoto(photoId);
-        photoId = await db.savePhoto(draft.photoBlob);
-      }
-
-      await db.saveEntry({
-        id: heute ? heute.id : undefined, // gleiche ID = überschreiben
-        exerciseId: ex.id,
-        date: new Date().toISOString(),
-        weight: draft.weight,
-        reps: draft.reps,
-        sets: draft.sets,
-        pos: draft.pos || 0,
-        note: draft.note.trim(),
-        photoId,
-      });
+      await eintragSchreiben(draft.sets);
       haptic(30);
       toast(`${ex.name}: ${fmtNum(draft.weight)} kg ${heute ? 'aktualisiert' : 'gespeichert'}`);
       go('#/');
@@ -820,7 +669,38 @@ async function viewEntry(exId) {
     }
   });
 
-  main.append(weightField, row, photoField, noteField, saveBtn);
+  /*
+   * „Satz speichern" ist der Knopf für den Trainingsablauf: nach jedem Satz
+   * einmal tippen, die Zählung geht um eins hoch und die Übung schließt sich.
+   * Die Farbe in der Liste wandert damit von orange über gelb nach grün.
+   *
+   * Der Knopf darunter bleibt für Korrekturen – dort gilt die Zahl, die im
+   * Feld „Sätze" steht.
+   */
+  const satzBtn = el('button', {
+    class: 'primary',
+    type: 'button',
+    text: `＋ Satz speichern  (${(heute ? heute.sets || 0 : 0) + 1}.)`,
+  });
+  satzBtn.addEventListener('click', async () => {
+    satzBtn.disabled = true;
+    try {
+      const neu = (heute ? heute.sets || 0 : 0) + 1;
+      await eintragSchreiben(neu);
+      haptic(30);
+      toast(`${ex.name}: ${neu}. Satz mit ${fmtNum(draft.weight)} kg`);
+      go('#/');
+    } catch (err) {
+      console.error(err);
+      toast('Speichern fehlgeschlagen.');
+      satzBtn.disabled = false;
+    }
+  });
+
+  saveBtn.className = 'secondary';
+  saveBtn.textContent = heute ? 'Werte im Eintrag korrigieren' : 'Ohne Satz nur Werte speichern';
+
+  main.append(weightField, row, noteField, satzBtn, saveBtn);
 
   /* Heutigen Eintrag verwerfen – ohne dass man dafür in die Verlaufsliste muss. */
   if (heute) {
@@ -876,11 +756,6 @@ async function viewEntry(exId) {
         }),
       ]);
 
-      if (e.photoId) {
-        db.getPhoto(e.photoId).then((blob) => {
-          if (blob) row.insertBefore(el('img', { src: objectUrl(blob), alt: 'Einstellung', loading: 'lazy' }), row.lastChild);
-        });
-      }
       hist.append(row);
     }
     main.append(hist);
@@ -910,20 +785,6 @@ async function exerciseMenu(ex) {
           text: `Muskelgruppe: ${reihenfolge.GRUPPEN[reihenfolge.gruppeVon(ex)]}`,
           onclick: () => finish('muskel'),
         }),
-        el('button', {
-          class: 'secondary',
-          type: 'button',
-          text: ex.iconPhotoId ? '🖼  Bild ersetzen' : '🖼  Eigenes Bild wählen',
-          onclick: () => finish('bild'),
-        }),
-        ex.iconPhotoId
-          ? el('button', {
-              class: 'secondary',
-              type: 'button',
-              text: '↩  Zurück zum Symbol',
-              onclick: () => finish('bild-weg'),
-            })
-          : null,
         el('button', {
           class: 'secondary danger',
           type: 'button',
@@ -995,21 +856,6 @@ async function exerciseMenu(ex) {
       toast(`Muskelgruppe: ${reihenfolge.GRUPPEN[gewaehlt]}`);
       viewEntry(ex.id);
     }
-  } else if (action === 'bild') {
-    const blob = await bildWaehlen();
-    if (blob) {
-      // Altes Bild löschen, sonst bleibt es als Waise in der Datenbank liegen.
-      if (ex.iconPhotoId) await db.deletePhoto(ex.iconPhotoId);
-      const photoId = await db.savePhoto(blob);
-      await db.saveExercise({ ...ex, iconPhotoId: photoId });
-      toast('Bild gesetzt');
-      viewEntry(ex.id);
-    }
-  } else if (action === 'bild-weg') {
-    if (ex.iconPhotoId) await db.deletePhoto(ex.iconPhotoId);
-    await db.saveExercise({ ...ex, iconPhotoId: null });
-    toast('Wieder das Symbol');
-    viewEntry(ex.id);
   } else if (action === 'archive') {
     const ok = await confirmDialog(
       'Übung ausblenden?',
@@ -1027,7 +873,7 @@ async function exerciseMenu(ex) {
     const ok = await confirmDialog(
       `„${ex.name}“ endgültig löschen?`,
       anzahl
-        ? `${anzahl} ${anzahl === 1 ? 'Eintrag' : 'Einträge'} samt Fotos werden mitgelöscht. Das lässt sich nicht rückgängig machen – nur über ein Backup. Zum bloßen Aufräumen der Liste reicht „Ausblenden“.`
+        ? `${anzahl} ${anzahl === 1 ? 'Eintrag' : 'Einträge'} werden mitgelöscht. Das lässt sich nicht rückgängig machen – nur über ein Backup. Zum bloßen Aufräumen der Liste reicht „Ausblenden“.`
         : 'Die Übung hat keine Einträge, es geht also nichts verloren.',
       'Endgültig löschen'
     );
@@ -1521,12 +1367,6 @@ async function driveKarte() {
           }
         },
       }),
-      schalter('Automatisch beim Verlassen der App sichern', e.auto, async (an) => {
-        await db.setMeta(backup.SCHLUESSEL.auto, an);
-      }),
-      schalter('Fotos mitsichern (größer, aber vollständig)', e.mitFotos, async (an) => {
-        await db.setMeta(backup.SCHLUESSEL.mitFotos, an);
-      }),
       el('button', {
         class: 'secondary danger',
         type: 'button',
@@ -1551,15 +1391,6 @@ async function driveKarte() {
   return karte;
 }
 
-/** Schalter-Zeile mit Beschriftung. */
-function schalter(label, an, onChange) {
-  const box = el('input', { type: 'checkbox', ...(an ? { checked: true } : {}) });
-  box.addEventListener('change', async () => {
-    await onChange(box.checked);
-    toast(box.checked ? `${label}: an` : `${label}: aus`);
-  });
-  return el('label', { class: 'schalter' }, [box, el('span', { text: label })]);
-}
 
 /* ---------------- Ansicht: Einstellungen ---------------- */
 
@@ -1593,14 +1424,8 @@ async function viewSettings() {
       el('button', {
         class: 'secondary',
         type: 'button',
-        text: '⬇  Backup exportieren (mit Fotos)',
-        onclick: () => doExport(true),
-      }),
-      el('button', {
-        class: 'secondary',
-        type: 'button',
-        text: '⬇  Nur Zahlen exportieren (klein)',
-        onclick: () => doExport(false),
+        text: '⬇  Backup exportieren',
+        onclick: () => doExport(),
       }),
       el('button', {
         class: 'secondary',
@@ -1643,19 +1468,19 @@ async function viewSettings() {
     el('div', { class: 'field' }, [
       el('div', {
         style: 'font-size:13px;color:var(--muted)',
-        html: `Texterkennung: <strong>${ocrStatus.native ? 'im Browser eingebaut (offline)' : 'nicht eingebaut – lädt bei Bedarf Tesseract aus dem Netz'}</strong>.<br>
+        html: `
                Version 1.0 · alle Daten lokal, keine Konten, kein Server.`,
       }),
     ])
   );
 }
 
-async function doExport(withPhotos) {
+async function doExport() {
   toast('Export wird erstellt …');
-  const data = await db.exportAll({ includePhotos: withPhotos });
+  const data = await db.exportAll();
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const stamp = new Date().toISOString().slice(0, 10);
-  const name = `pump-tracker-${stamp}${withPhotos ? '' : '-ohne-fotos'}.json`;
+  const name = `pump-tracker-${stamp}.json`;
 
   const file = new File([blob], name, { type: 'application/json' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1677,7 +1502,7 @@ async function doExport(withPhotos) {
 /** Meldung nach einem Import – nur nennen, was tatsächlich passiert ist. */
 function importMeldung(c) {
   const teile = [`${c.entries} Einträge`];
-  if (c.photos) teile.push(`${c.photos} Fotos`);
+
   if (c.neu) teile.push(`${c.neu} neue Übungen`);
   if (c.merged) teile.push(`${c.merged} Übungen zusammengeführt`);
   return `Eingespielt: ${teile.join(', ')}`;
@@ -1831,7 +1656,28 @@ async function starthilfe() {
     /* nicht überall vorhanden */
   }
 
-  await autoSichern('Start');
+  /*
+   * Anmeldung vorbereiten, bevor sie gebraucht wird: Google-Skript laden und
+   * still ein Token holen. Gelingt das, ist der Sichern-Knopf später ein
+   * einziger Tipp ohne Anmeldefenster – und die Erlaubnis, ein Fenster zu
+   * öffnen, geht nicht durch Ladezeiten verloren.
+   */
+  const drv = await backup.einstellungen();
+  if (drv.clientId) {
+    const bereit = await drive.vorbereiten(drv.clientId);
+    if (bereit) {
+      /*
+       * Nur die Leiste austauschen, nicht die ganze Ansicht neu zeichnen.
+       *
+       * Ein `route()` von hier aus lief mit dem noch laufenden ersten Aufbau
+       * ins Gehege: beide leeren erst den Bereich und hängen dann – nach einem
+       * `await` – ihre Liste an, sodass die Übungen doppelt erschienen.
+       */
+      const alteLeiste = document.querySelector('.save-bar');
+      if (alteLeiste) alteLeiste.replaceWith(await sicherungsLeiste());
+      await autoSichern('Start');
+    }
+  }
 
   if (await backup.erinnerungFaellig()) {
     const ok = await confirmDialog(
@@ -1840,7 +1686,7 @@ async function starthilfe() {
       'Sichern'
     );
     await backup.erinnerungVerschieben();
-    if (ok) await doExport(true);
+    if (ok) await doExport();
   }
 }
 

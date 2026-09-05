@@ -6,7 +6,8 @@ const DB_NAME = 'pump-tracker';
 // 2: Store "meta" für Einstellungen (Drive-Anbindung)
 // 3: Übungen bekommen ein Symbol (icon) und optional ein eigenes Bild
 // 4: Symbole neu zuordnen – neu hinzugekommene wirken sonst nicht rückwirkend
-const DB_VERSION = 4;
+// 5: Fotos entfernt – Funktion abgeschafft, Altbestand wird geräumt
+const DB_VERSION = 5;
 
 // Die 14 Geräte vom Trainingsplan. weightStep 4.5 = 10-lbs-Platten im Stapel.
 const DEFAULT_EXERCISES = [
@@ -47,26 +48,34 @@ function openDB() {
         s.createIndex('exerciseId', 'exerciseId');
         s.createIndex('date', 'date');
       }
-      if (!db.objectStoreNames.contains('photos')) {
-        db.createObjectStore('photos', { keyPath: 'id' });
-      }
+      // Der Store 'photos' wird nicht mehr angelegt. Bestehende Datenbanken
+      // behalten ihn (Löschen eines Stores während der Migration ist heikel),
+      // er wird aber unten geleert und nie wieder beschrieben.
       if (!db.objectStoreNames.contains('meta')) {
         db.createObjectStore('meta', { keyPath: 'key' });
       }
-      if (ev.oldVersion < 1) {
-        const s = req.transaction.objectStore('exercises');
+      /*
+       * Erstbefüllung am *Inhalt* festmachen, nicht an der Versionsnummer.
+       *
+       * Mit `oldVersion < 1` bliebe eine leere Datenbank für immer leer, wenn
+       * sie auf anderem Weg entstanden ist – etwa weil ein Werkzeug sie mit
+       * `indexedDB.open(name)` ohne Stores angelegt hat. Die Übungsliste wäre
+       * dann dauerhaft leer, ohne dass ein Fehler sichtbar würde.
+       */
+      const exStore = req.transaction.objectStore('exercises');
+      exStore.count().onsuccess = (e) => {
+        if (e.target.result > 0) return;
         DEFAULT_EXERCISES.forEach((name, i) => {
-          s.put({
+          exStore.put({
             id: uid(),
             name,
             sort: i,
             weightStep: 4.5,
             archived: false,
             icon: ICON_FUER_NAME[name] || 'standard',
-            iconPhotoId: null,
           });
         });
-      }
+      };
 
       if (ev.oldVersion >= 1 && ev.oldVersion < 3) {
         // Bestehende Übungen nachträglich mit einem Symbol versehen. Über den
@@ -78,7 +87,6 @@ function openDB() {
           const ex = c.value;
           if (!ex.icon) {
             ex.icon = ICON_FUER_NAME[ex.name] || 'standard';
-            ex.iconPhotoId = ex.iconPhotoId || null;
             c.update(ex);
           }
           c.continue();
@@ -109,6 +117,39 @@ function openDB() {
               ex.icon = passend;
               c.update(ex);
             }
+          }
+          c.continue();
+        };
+      }
+
+      if (ev.oldVersion >= 1 && ev.oldVersion < 5) {
+        /*
+         * Fotos abgeschafft.
+         *
+         * Der Bilderteil ist entfallen; ohne Aufräumen lägen die Blobs für
+         * immer in der Datenbank und blähten jede Sicherung auf. Verweise in
+         * Einträgen und Übungen werden gekappt, der Store geleert.
+         */
+        if (db.objectStoreNames.contains('photos')) {
+          req.transaction.objectStore('photos').clear();
+        }
+        const en = req.transaction.objectStore('entries');
+        en.openCursor().onsuccess = (e) => {
+          const c = e.target.result;
+          if (!c) return;
+          if (c.value.photoId) {
+            delete c.value.photoId;
+            c.update(c.value);
+          }
+          c.continue();
+        };
+        const ex = req.transaction.objectStore('exercises');
+        ex.openCursor().onsuccess = (e) => {
+          const c = e.target.result;
+          if (!c) return;
+          if ('iconPhotoId' in c.value) {
+            delete c.value.iconPhotoId;
+            c.update(c.value);
           }
           c.continue();
         };
@@ -180,7 +221,7 @@ export async function getExercise(id) {
   return tx('exercises', 'readonly', (s) => reqValue(s.get(id)));
 }
 
-export async function addExercise(name, { icon = null, iconPhotoId = null } = {}) {
+export async function addExercise(name, { icon = null } = {}) {
   const all = await tx('exercises', 'readonly', (s) => reqValue(s.getAll()));
   const sort = all.reduce((m, e) => Math.max(m, e.sort), -1) + 1;
   const sauber = name.trim();
@@ -192,7 +233,6 @@ export async function addExercise(name, { icon = null, iconPhotoId = null } = {}
     archived: false,
     // Heißt die neue Übung wie ein bekanntes Gerät, gibt es das Symbol gratis.
     icon: icon || iconFuerName(sauber),
-    iconPhotoId,
   };
   await tx('exercises', 'readwrite', (s) => s.put(ex));
   await bumpRevision();
@@ -250,66 +290,22 @@ export async function saveEntry(entry) {
 
 export async function deleteEntry(id) {
   const entry = await tx('entries', 'readonly', (s) => reqValue(s.get(id)));
-  if (entry && entry.photoId) await deletePhoto(entry.photoId);
   await tx('entries', 'readwrite', (s) => s.delete(id));
   await bumpRevision();
 }
 
-/* ---------- Fotos ---------- */
-
-export async function savePhoto(blob) {
-  const id = uid();
-  await tx('photos', 'readwrite', (s) => s.put({ id, blob }));
-  return id;
-}
-
-export async function getPhoto(id) {
-  if (!id) return null;
-  const rec = await tx('photos', 'readonly', (s) => reqValue(s.get(id)));
-  return rec ? rec.blob : null;
-}
-
-export async function deletePhoto(id) {
-  if (!id) return;
-  await tx('photos', 'readwrite', (s) => s.delete(id));
-}
-
 /* ---------- Backup ---------- */
 
-function blobToDataURL(blob) {
-  return new Promise((resolve) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.readAsDataURL(blob);
-  });
-}
-
-async function dataURLToBlob(url) {
-  const res = await fetch(url);
-  return res.blob();
-}
-
-export async function exportAll({ includePhotos = true } = {}) {
+export async function exportAll() {
   const exercises = await tx('exercises', 'readonly', (s) => reqValue(s.getAll()));
   const entries = await tx('entries', 'readonly', (s) => reqValue(s.getAll()));
-  const out = {
+  return {
     format: 'pump-tracker',
     version: 1,
     exportedAt: new Date().toISOString(),
     exercises,
     entries,
-    photos: [],
   };
-  if (includePhotos) {
-    const photos = await tx('photos', 'readonly', (s) => reqValue(s.getAll()));
-    out.photos = await Promise.all(
-      photos.map(async (p) => ({ id: p.id, dataUrl: await blobToDataURL(p.blob) }))
-    );
-  } else {
-    // Ohne Fotos: Verweise kappen, damit der Import keine toten IDs anlegt.
-    out.entries = entries.map((e) => ({ ...e, photoId: null }));
-  }
-  return out;
 }
 
 const normName = (s) => String(s || '').trim().toLowerCase();
@@ -328,13 +324,10 @@ export async function importAll(data) {
     throw new Error('Kein gültiges Pump-Tracker-Backup.');
   // neu = kannte die App nicht · aktualisiert = gleiche ID, überschrieben
   // · merged = gleicher Name, andere ID, zusammengeführt
-  const counts = { neu: 0, aktualisiert: 0, merged: 0, entries: 0, photos: 0 };
+  const counts = { neu: 0, aktualisiert: 0, merged: 0, entries: 0 };
 
-  for (const p of data.photos || []) {
-    const blob = await dataURLToBlob(p.dataUrl);
-    await tx('photos', 'readwrite', (s) => s.put({ id: p.id, blob }));
-    counts.photos++;
-  }
+  // Ältere Sicherungen enthalten noch Fotos. Die werden übergangen, statt den
+  // Import abzulehnen – die Trainingsdaten darin sind ja weiterhin gültig.
 
   const existing = await tx('exercises', 'readonly', (s) => reqValue(s.getAll()));
   const byId = new Map(existing.map((e) => [e.id, e]));
@@ -365,9 +358,9 @@ export async function importAll(data) {
 
   for (const en of data.entries || []) {
     if (!en || !en.id) continue;
-    const mapped = idMap.has(en.exerciseId)
-      ? { ...en, exerciseId: idMap.get(en.exerciseId) }
-      : en;
+    const mapped = { ...en };
+    if (idMap.has(en.exerciseId)) mapped.exerciseId = idMap.get(en.exerciseId);
+    delete mapped.photoId; // aus alten Sicherungen; die Bilder gibt es nicht mehr
     await tx('entries', 'readwrite', (s) => s.put(mapped));
     counts.entries++;
   }
@@ -391,11 +384,9 @@ export async function zaehleEintraege(exerciseId) {
 export async function deleteExercise(id) {
   const eintraege = await getEntries(id);
   for (const e of eintraege) {
-    if (e.photoId) await deletePhoto(e.photoId);
     await tx('entries', 'readwrite', (s) => s.delete(e.id));
   }
   const ex = await getExercise(id);
-  if (ex && ex.iconPhotoId) await deletePhoto(ex.iconPhotoId);
   await tx('exercises', 'readwrite', (s) => s.delete(id));
   await bumpRevision();
   return { eintraege: eintraege.length };
