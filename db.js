@@ -7,7 +7,11 @@ const DB_NAME = 'pump-tracker';
 // 3: Übungen bekommen ein Symbol (icon) und optional ein eigenes Bild
 // 4: Symbole neu zuordnen – neu hinzugekommene wirken sonst nicht rückwirkend
 // 5: Fotos entfernt – Funktion abgeschafft, Altbestand wird geräumt
-const DB_VERSION = 5;
+// 6: Trainingsumgebungen – Übungen gehören je einer Umgebung an
+const DB_VERSION = 6;
+
+// Name der Umgebung, in die alles Bestehende einsortiert wird.
+const STANDARD_UMGEBUNG = 'Fitnessfarm';
 
 // Die 14 Geräte vom Trainingsplan. weightStep 4.5 = 10-lbs-Platten im Stapel.
 const DEFAULT_EXERCISES = [
@@ -54,14 +58,42 @@ function openDB() {
       if (!db.objectStoreNames.contains('meta')) {
         db.createObjectStore('meta', { keyPath: 'key' });
       }
+      if (!db.objectStoreNames.contains('umgebungen')) {
+        db.createObjectStore('umgebungen', { keyPath: 'id' });
+      }
       /*
-       * Erstbefüllung am *Inhalt* festmachen, nicht an der Versionsnummer.
+       * Erstbefüllung und Zuordnung hängen am *Inhalt*, nicht an der
+       * Versionsnummer: Mit `oldVersion < 1` bliebe eine leer angelegte
+       * Datenbank für immer leer, ohne dass ein Fehler sichtbar würde.
        *
-       * Mit `oldVersion < 1` bliebe eine leere Datenbank für immer leer, wenn
-       * sie auf anderem Weg entstanden ist – etwa weil ein Werkzeug sie mit
-       * `indexedDB.open(name)` ohne Stores angelegt hat. Die Übungsliste wäre
-       * dann dauerhaft leer, ohne dass ein Fehler sichtbar würde.
+       * Umgebung anlegen und Übungen zuordnen passieren in EINER Kette. Zwei
+       * getrennte `count()`-Abfragen wären beide gestellt, bevor die erste
+       * antwortet – beide sähen „leer" und legten je eine „Fitnessfarm" an.
        */
+      const umStore = req.transaction.objectStore('umgebungen');
+      umStore.count().onsuccess = (e) => {
+        if (e.target.result === 0) {
+          umStore.put({ id: uid(), name: STANDARD_UMGEBUNG, sort: 0 });
+        }
+        umStore.getAll().onsuccess = (e2) => {
+          const erste = e2.target.result.sort((a, b) => a.sort - b.sort)[0];
+          if (!erste) return;
+          // Übungen ohne Zugehörigkeit einsortieren – auch die eben erst
+          // angelegten Standardübungen. Der Cursor läuft nach deren Einfügen,
+          // weil er erst hier in Auftrag gegeben wird.
+          const ex = req.transaction.objectStore('exercises');
+          ex.openCursor().onsuccess = (e3) => {
+            const c = e3.target.result;
+            if (!c) return;
+            if (!c.value.umgebungId) {
+              c.value.umgebungId = erste.id;
+              c.update(c.value);
+            }
+            c.continue();
+          };
+        };
+      };
+
       const exStore = req.transaction.objectStore('exercises');
       exStore.count().onsuccess = (e) => {
         if (e.target.result > 0) return;
@@ -73,6 +105,8 @@ function openDB() {
             weightStep: 4.5,
             archived: false,
             icon: ICON_FUER_NAME[name] || 'standard',
+            // umgebungId setzt die Zuordnung oben – hier wäre die ID der
+            // Standardumgebung noch nicht verlässlich bekannt.
           });
         });
       };
@@ -154,6 +188,7 @@ function openDB() {
           c.continue();
         };
       }
+
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -210,21 +245,90 @@ export async function bumpRevision() {
 
 export const getRevision = () => getMeta('revision', 0);
 
+/* ---------- Trainingsumgebungen ---------- */
+
+export async function getUmgebungen() {
+  const alle = await tx('umgebungen', 'readonly', (s) => reqValue(s.getAll()));
+  return alle.sort((a, b) => a.sort - b.sort);
+}
+
+export async function addUmgebung(name) {
+  const alle = await getUmgebungen();
+  const sort = alle.reduce((m, u) => Math.max(m, u.sort), -1) + 1;
+  const u = { id: uid(), name: name.trim(), sort };
+  await tx('umgebungen', 'readwrite', (s) => s.put(u));
+  await bumpRevision();
+  return u;
+}
+
+export async function saveUmgebung(u) {
+  await tx('umgebungen', 'readwrite', (s) => s.put(u));
+  await bumpRevision();
+  return u;
+}
+
+/**
+ * Umgebung samt aller ihrer Übungen und deren Einträge entfernen.
+ *
+ * Die letzte Umgebung lässt sich nicht löschen – ohne sie hätten neue Übungen
+ * keinen Ort, und die Liste wäre dauerhaft leer.
+ */
+export async function deleteUmgebung(id) {
+  const alle = await getUmgebungen();
+  if (alle.length <= 1) throw new Error('Die letzte Trainingsumgebung kann nicht gelöscht werden.');
+
+  const uebungen = (await tx('exercises', 'readonly', (s) => reqValue(s.getAll()))).filter(
+    (e) => e.umgebungId === id
+  );
+  let eintraege = 0;
+  for (const ex of uebungen) {
+    for (const e of await getEntries(ex.id)) {
+      await tx('entries', 'readwrite', (s) => s.delete(e.id));
+      eintraege++;
+    }
+    await tx('exercises', 'readwrite', (s) => s.delete(ex.id));
+  }
+  await tx('umgebungen', 'readwrite', (s) => s.delete(id));
+  await bumpRevision();
+  return { uebungen: uebungen.length, eintraege };
+}
+
+/** Wie viel an einer Umgebung hängt – für die Rückfrage vor dem Löschen. */
+export async function umfangUmgebung(id) {
+  const uebungen = (await tx('exercises', 'readonly', (s) => reqValue(s.getAll()))).filter(
+    (e) => e.umgebungId === id
+  );
+  const ids = new Set(uebungen.map((e) => e.id));
+  const eintraege = (await tx('entries', 'readonly', (s) => reqValue(s.getAll()))).filter((e) =>
+    ids.has(e.exerciseId)
+  );
+  return { uebungen: uebungen.length, eintraege: eintraege.length };
+}
+
 /* ---------- Übungen ---------- */
 
-export async function getExercises({ includeArchived = false } = {}) {
+/**
+ * Übungen, standardmäßig aus allen Umgebungen.
+ * `umgebungId` grenzt auf eine ein – das nutzt die Liste unter „Übungen".
+ */
+export async function getExercises({ includeArchived = false, umgebungId = null } = {}) {
   const all = await tx('exercises', 'readonly', (s) => reqValue(s.getAll()));
-  return all.filter((e) => includeArchived || !e.archived).sort((a, b) => a.sort - b.sort);
+  return all
+    .filter((e) => includeArchived || !e.archived)
+    .filter((e) => !umgebungId || e.umgebungId === umgebungId)
+    .sort((a, b) => a.sort - b.sort);
 }
 
 export async function getExercise(id) {
   return tx('exercises', 'readonly', (s) => reqValue(s.get(id)));
 }
 
-export async function addExercise(name, { icon = null } = {}) {
+export async function addExercise(name, { icon = null, umgebungId = null } = {}) {
   const all = await tx('exercises', 'readonly', (s) => reqValue(s.getAll()));
   const sort = all.reduce((m, e) => Math.max(m, e.sort), -1) + 1;
   const sauber = name.trim();
+  // Ohne ausdrückliche Angabe in die erste Umgebung – es gibt immer eine.
+  const ziel = umgebungId || (await getUmgebungen())[0]?.id || null;
   const ex = {
     id: uid(),
     name: sauber,
@@ -233,6 +337,7 @@ export async function addExercise(name, { icon = null } = {}) {
     archived: false,
     // Heißt die neue Übung wie ein bekanntes Gerät, gibt es das Symbol gratis.
     icon: icon || iconFuerName(sauber),
+    umgebungId: ziel,
   };
   await tx('exercises', 'readwrite', (s) => s.put(ex));
   await bumpRevision();
@@ -299,10 +404,12 @@ export async function deleteEntry(id) {
 export async function exportAll() {
   const exercises = await tx('exercises', 'readonly', (s) => reqValue(s.getAll()));
   const entries = await tx('entries', 'readonly', (s) => reqValue(s.getAll()));
+  const umgebungen = await getUmgebungen();
   return {
     format: 'pump-tracker',
-    version: 1,
+    version: 2, // 2: mit Trainingsumgebungen
     exportedAt: new Date().toISOString(),
+    umgebungen,
     exercises,
     entries,
   };
@@ -329,14 +436,43 @@ export async function importAll(data) {
   // Ältere Sicherungen enthalten noch Fotos. Die werden übergangen, statt den
   // Import abzulehnen – die Trainingsdaten darin sind ja weiterhin gültig.
 
+  /*
+   * Umgebungen zuerst, nach demselben Muster wie die Übungen: gleiche ID
+   * überschreibt, gleicher Name führt zusammen. Sonst entstünden auf einem
+   * zweiten Gerät zwei „Fitnessfarm" nebeneinander.
+   */
+  const umVorhanden = await getUmgebungen();
+  const umNachId = new Map(umVorhanden.map((u) => [u.id, u]));
+  const umNachName = new Map(umVorhanden.map((u) => [normName(u.name), u]));
+  const umMap = new Map(); // Backup-ID -> ID hier
+
+  for (const u of data.umgebungen || []) {
+    if (!u || !u.id) continue;
+    const zwilling = umNachId.has(u.id) ? null : umNachName.get(normName(u.name));
+    if (zwilling) {
+      umMap.set(u.id, zwilling.id);
+    } else {
+      await tx('umgebungen', 'readwrite', (s) => s.put(u));
+      umNachId.set(u.id, u);
+      umNachName.set(normName(u.name), u);
+    }
+  }
+  const ersteUmgebung = (await getUmgebungen())[0];
+
   const existing = await tx('exercises', 'readonly', (s) => reqValue(s.getAll()));
   const byId = new Map(existing.map((e) => [e.id, e]));
   const byName = new Map(existing.map((e) => [normName(e.name), e]));
 
   const idMap = new Map(); // Backup-ID -> ID in dieser Datenbank
 
-  for (const ex of data.exercises || []) {
-    if (!ex || !ex.id) continue;
+  for (const roh of data.exercises || []) {
+    if (!roh || !roh.id) continue;
+    // Umgebung mitumbiegen; Sicherungen ohne Umgebungen (Format 1) landen in
+    // der ersten vorhandenen, damit die Übung nicht heimatlos wird.
+    const ex = { ...roh };
+    if (umMap.has(ex.umgebungId)) ex.umgebungId = umMap.get(ex.umgebungId);
+    if (!ex.umgebungId) ex.umgebungId = ersteUmgebung ? ersteUmgebung.id : null;
+
     const twin = byId.has(ex.id) ? null : byName.get(normName(ex.name));
 
     if (twin) {

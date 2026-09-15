@@ -351,6 +351,27 @@ Zwei Dinge passieren dabei automatisch:
 - **Der Zustand steht zusätzlich im Vorlesetext** der Schaltfläche, damit die
   Information nicht allein an der Farbe hängt.
 
+## Trainingsumgebungen
+
+Übungen gehören je einer **Trainingsumgebung** an – einem Studio, dem
+Heimtraining, dem Hotel. Über der Liste stehen sie als Registerkarten:
+
+- **Antippen** wechselt die Umgebung. Die Liste zeigt dann nur deren Übungen.
+- **＋** legt eine neue an. Sie startet leer; neue Übungen landen immer in der
+  gerade gewählten Umgebung.
+- **⋯** (oder ein Tipp auf die schon aktive Karte) öffnet Umbenennen und
+  Löschen. Die letzte Umgebung lässt sich nicht löschen – ohne sie hätten
+  Übungen keinen Ort.
+
+Beim Löschen einer Umgebung verschwinden **ihre Übungen samt Einträgen**. Die
+Rückfrage nennt vorher die genauen Zahlen.
+
+Alles Bestehende ist bei der Umstellung geschlossen in „Fitnessfarm" gelandet.
+
+**Statistik und Reihenfolge folgen der gewählten Umgebung.** Eine Liste, die
+Geräte aus zwei Studios mischt, beantwortet keine Frage, die man sich stellt –
+auch die Besuchszählung meint „wie oft war ich in *diesem* Studio".
+
 ## Ablauf im Studio
 
 Pro Übung gibt es zwei Knöpfe:

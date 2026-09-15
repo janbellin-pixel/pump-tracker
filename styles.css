@@ -1484,3 +1484,53 @@ main {
   line-height: 1.5;
   max-width: 320px;
 }
+
+/* ---------- Registerkarten der Trainingsumgebungen ---------- */
+
+.um-reiter {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  /* Viele Umgebungen sollen scrollen statt umzubrechen – eine zweite Zeile
+     würde die Liste nach unten schieben und bei jedem Wechsel springen. */
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+
+.um-reiter::-webkit-scrollbar {
+  display: none;
+}
+
+.um-tab {
+  flex: none;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 21px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.um-tab.aktiv {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.um-tab:active {
+  filter: brightness(0.92);
+}
+
+.um-plus,
+.um-menue {
+  padding: 0;
+  width: 42px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+}

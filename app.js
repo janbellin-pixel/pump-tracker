@@ -437,24 +437,182 @@ function appBeenden() {
   });
 }
 
+/* ---------------- Trainingsumgebungen ---------------- */
+
+const UMGEBUNG_KEY = 'umgebung.aktiv';
+
+/**
+ * Die gerade gewählte Umgebung.
+ *
+ * Fällt auf die erste zurück, wenn die gemerkte nicht mehr existiert – etwa
+ * weil sie gelöscht oder auf einem anderen Gerät entfernt wurde. Ohne diesen
+ * Rückfall stünde man vor einer leeren Liste ohne erkennbaren Grund.
+ */
+async function aktiveUmgebung() {
+  const alle = await db.getUmgebungen();
+  if (!alle.length) return null;
+  const id = await db.getMeta(UMGEBUNG_KEY, null);
+  return alle.find((u) => u.id === id) || alle[0];
+}
+
+async function setzeUmgebung(id) {
+  await db.setMeta(UMGEBUNG_KEY, id);
+}
+
+/** Registerkarten über der Übungsliste. */
+async function umgebungsReiter() {
+  const alle = await db.getUmgebungen();
+  const aktiv = await aktiveUmgebung();
+  const leiste = el('div', { class: 'um-reiter', role: 'tablist', 'aria-label': 'Trainingsumgebung' });
+
+  for (const u of alle) {
+    leiste.append(
+      el('button', {
+        class: 'um-tab' + (aktiv && u.id === aktiv.id ? ' aktiv' : ''),
+        type: 'button',
+        role: 'tab',
+        'aria-selected': String(Boolean(aktiv) && u.id === aktiv.id),
+        text: u.name,
+        onclick: async () => {
+          if (aktiv && u.id === aktiv.id) return umgebungMenue(u);
+          await setzeUmgebung(u.id);
+          haptic();
+          viewList();
+        },
+      })
+    );
+  }
+
+  leiste.append(
+    el('button', {
+      class: 'um-tab um-plus',
+      type: 'button',
+      text: '＋',
+      'aria-label': 'Neue Trainingsumgebung',
+      onclick: async () => {
+        const name = await promptDialog('Neue Trainingsumgebung', {
+          placeholder: 'z. B. Zuhause',
+        });
+        if (!name || !name.trim()) return;
+        const neu = await db.addUmgebung(name);
+        await setzeUmgebung(neu.id);
+        toast(`„${neu.name}“ angelegt – jetzt Übungen hinzufügen`, 3500);
+        viewList();
+      },
+    })
+  );
+
+  // Hinweis auf das versteckte Menü: ein Tipp auf die aktive Karte öffnet es.
+  if (aktiv) {
+    leiste.append(
+      el('button', {
+        class: 'um-tab um-menue',
+        type: 'button',
+        text: '⋯',
+        'aria-label': `„${aktiv.name}“ umbenennen oder löschen`,
+        onclick: () => umgebungMenue(aktiv),
+      })
+    );
+  }
+
+  return leiste;
+}
+
+async function umgebungMenue(u) {
+  const alle = await db.getUmgebungen();
+  const aktion = await showDialog(
+    (finish) => [
+      el('h2', { text: u.name }),
+      el('div', { class: 'settings-list' }, [
+        el('button', {
+          class: 'secondary',
+          type: 'button',
+          text: 'Umbenennen',
+          onclick: () => finish('rename'),
+        }),
+        alle.length > 1
+          ? el('button', {
+              class: 'secondary danger',
+              type: 'button',
+              text: '⚠  Umgebung löschen',
+              onclick: () => finish('delete'),
+            })
+          : el('p', {
+              style: 'font-size:12px;color:var(--muted);margin:8px 2px 0',
+              text: 'Die letzte Umgebung lässt sich nicht löschen – ohne sie hätten Übungen keinen Ort.',
+            }),
+      ]),
+      el('div', { class: 'dialog-actions' }, [
+        el('button', { type: 'button', text: 'Schließen', onclick: () => finish(null) }),
+      ]),
+    ],
+    { onDismiss: null }
+  );
+
+  if (aktion === 'rename') {
+    const name = await promptDialog('Umgebung umbenennen', { value: u.name });
+    if (name && name.trim()) {
+      await db.saveUmgebung({ ...u, name: name.trim() });
+      toast('Umbenannt');
+      viewList();
+    }
+  } else if (aktion === 'delete') {
+    const umfang = await db.umfangUmgebung(u.id);
+    const ok = await confirmDialog(
+      `„${u.name}“ löschen?`,
+      umfang.uebungen
+        ? `${umfang.uebungen} ${umfang.uebungen === 1 ? 'Übung' : 'Übungen'} und ${umfang.eintraege} ${umfang.eintraege === 1 ? 'Eintrag' : 'Einträge'} werden mitgelöscht. Das lässt sich nur über ein Backup rückgängig machen.`
+        : 'Die Umgebung ist leer, es geht nichts verloren.',
+      'Löschen'
+    );
+    if (!ok) return;
+    try {
+      const res = await db.deleteUmgebung(u.id);
+      await setzeUmgebung((await db.getUmgebungen())[0].id);
+      toast(
+        res.uebungen
+          ? `„${u.name}“ mit ${res.uebungen} ${res.uebungen === 1 ? 'Übung' : 'Übungen'} gelöscht`
+          : `„${u.name}“ gelöscht`,
+        3500
+      );
+      viewList();
+    } catch (err) {
+      toast(err.message, 4000);
+    }
+  }
+}
+
 /* ---------------- Ansicht: Übungsliste ---------------- */
 
 async function viewList() {
-  setTop('Pump Tracker', {
+  const umgebung = await aktiveUmgebung();
+
+  setTop(umgebung ? umgebung.name : 'Pump Tracker', {
     right: [
       iconBtn('⇅', 'Reihenfolge ändern', () => go('#/sortieren')),
       iconBtn('＋', 'Übung hinzufügen', addExerciseFlow),
     ],
   });
 
-  const [exercises, lastMap] = await Promise.all([db.getExercises(), db.getLastEntryMap()]);
+  const [exercises, lastMap] = await Promise.all([
+    db.getExercises({ umgebungId: umgebung ? umgebung.id : null }),
+    db.getLastEntryMap(),
+  ]);
   const main = $('#main');
   main.replaceChildren();
 
+  main.append(await umgebungsReiter());
   main.append(await sicherungsLeiste());
 
   if (!exercises.length) {
-    main.append(el('p', { class: 'empty', text: 'Keine Übungen. Oben rechts auf ＋ tippen.' }));
+    main.append(
+      el('p', {
+        class: 'empty',
+        text: umgebung
+          ? `„${umgebung.name}“ hat noch keine Übungen. Oben rechts auf ＋ tippen.`
+          : 'Keine Übungen. Oben rechts auf ＋ tippen.',
+      })
+    );
     return;
   }
 
@@ -497,9 +655,10 @@ async function addExerciseFlow() {
   const name = await promptDialog('Neue Übung', { placeholder: 'z. B. Wadenheben' });
   if (!name || !name.trim()) return;
 
-  const ex = await db.addExercise(name);
+  // In die gerade gewählte Umgebung, nicht pauschal in die erste.
+  const umgebung = await aktiveUmgebung();
+  const ex = await db.addExercise(name, { umgebungId: umgebung ? umgebung.id : null });
 
-  // Bild direkt anbieten – hinterher sucht es kaum jemand im Menü.
   toast(
     ex.icon === 'standard'
       ? `„${ex.name}“ angelegt – kein passendes Symbol gefunden`
@@ -900,11 +1059,16 @@ async function exerciseMenu(ex) {
  * langweiliger, aber im Studio mit einer Hand zuverlässig bedienbar.
  */
 async function viewSortieren() {
-  setTop('Reihenfolge', { left: iconBtn('←', 'Zurück', () => go('#/')) });
+  const umgebung = await aktiveUmgebung();
+  setTop(umgebung ? `Reihenfolge – ${umgebung.name}` : 'Reihenfolge', {
+    left: iconBtn('←', 'Zurück', () => go('#/')),
+  });
   const main = $('#main');
   main.replaceChildren();
 
-  let liste = await db.getExercises();
+  // Sortiert wird immer innerhalb einer Umgebung – geräteübergreifend zu
+  // mischen ergäbe keine Trainingsreihenfolge.
+  let liste = await db.getExercises({ umgebungId: umgebung ? umgebung.id : null });
   if (liste.length < 2) {
     main.append(el('p', { class: 'empty', text: 'Dafür braucht es mindestens zwei Übungen.' }));
     return;
@@ -1016,15 +1180,26 @@ async function viewSortieren() {
 let steigerungsModus = 'letztes';
 
 async function viewStats() {
-  setTop('Statistik');
+  const umgebung = await aktiveUmgebung();
+  setTop(umgebung ? `Statistik – ${umgebung.name}` : 'Statistik');
 
   const main = $('#main');
   main.replaceChildren();
 
-  const [alleEintraege, uebungen] = await Promise.all([
-    db.getAllEntries(),
-    db.getExercises({ includeArchived: true }),
-  ]);
+  /*
+   * Die Auswertung bezieht sich auf die gewählte Umgebung.
+   *
+   * Eine Liste, die Geräte aus zwei Studios mischt, beantwortet keine Frage,
+   * die man sich stellt. Auch die Besuchszählung bleibt dabei: „wie oft war
+   * ich in diesem Studio" ist gemeint, nicht „wie oft habe ich überhaupt
+   * trainiert".
+   */
+  const uebungen = await db.getExercises({
+    includeArchived: true,
+    umgebungId: umgebung ? umgebung.id : null,
+  });
+  const gehoertDazu = new Set(uebungen.map((e) => e.id));
+  const alleEintraege = (await db.getAllEntries()).filter((e) => gehoertDazu.has(e.exerciseId));
 
   if (!alleEintraege.length) {
     main.append(
