@@ -213,6 +213,14 @@ export const STEIGERUNG_MODI = [
     label: 'Letzte Woche',
     kurz: 'in den letzten 7 Tagen',
     erklaerung: 'Erster gegen letzten Eintrag innerhalb der letzten 7 Tage.',
+    tage: 7,
+  },
+  {
+    // Das Fenster wächst durch wiederholtes Antippen in 30-Tage-Schritten.
+    id: 'tage',
+    label: 'Letzte 30 Tage',
+    tage: 30,
+    schrittweite: 30,
   },
   {
     id: 'alles',
@@ -222,6 +230,22 @@ export const STEIGERUNG_MODI = [
   },
 ];
 
+export const TAGE_SCHRITT = 30;
+
+/**
+ * Welches Zeitfenster gilt für die Besuchszählung?
+ *
+ * Sie folgt dem gewählten Vergleich – mit einer Ausnahme: „Letztes Training"
+ * ist kein Zeitraum, sondern ein Vergleich zweier Einträge. Dafür gibt es kein
+ * sinnvolles Besuchsfenster, deshalb bleibt es dort bei einer Woche.
+ */
+export function besuchsFenster(modus, tage = TAGE_SCHRITT) {
+  if (modus === 'letztes') return BESUCHE_TAGE;
+  if (modus === 'woche') return 7;
+  if (modus === 'tage') return tage;
+  return null; // 'alles' – ohne Begrenzung
+}
+
 /**
  * Steigerung je Übung, je nach Modus unterschiedlich abgegrenzt.
  *
@@ -229,10 +253,11 @@ export const STEIGERUNG_MODI = [
  * beiden jüngsten Einträge, auch wenn dazwischen drei Wochen Pause lagen.
  * Ein 7-Tage-Fenster würde hier daneben liegen, sobald man mal aussetzt.
  */
-export function steigerungJeUebung(entries, exercises, modus, jetzt = Date.now()) {
+export function steigerungJeUebung(entries, exercises, modus, jetzt = Date.now(), tage = TAGE_SCHRITT) {
   let basis = entries;
-  if (modus === 'woche') {
-    const grenze = jetzt - 7 * 86400000;
+  const fenster = modus === 'woche' ? 7 : modus === 'tage' ? tage : null;
+  if (fenster) {
+    const grenze = jetzt - fenster * 86400000;
     basis = entries.filter((e) => new Date(e.date).getTime() >= grenze);
   }
 
@@ -274,25 +299,28 @@ export function steigerungJeUebung(entries, exercises, modus, jetzt = Date.now()
 }
 
 /** Die drei Werte der Statistik für den gewählten Steigerungs-Modus. */
-export function bilanz(entries, exercises, modus = 'letztes', jetzt = Date.now()) {
-  const proUebung = steigerungJeUebung(entries, exercises, modus, jetzt);
+export function bilanz(entries, exercises, modus = 'letztes', jetzt = Date.now(), tage = TAGE_SCHRITT) {
+  const proUebung = steigerungJeUebung(entries, exercises, modus, jetzt, tage);
   const mitVergleich = proUebung.filter((f) => f.delta !== null && f.von > 0);
 
   const prozente = mitVergleich.map((f) => ((f.bis - f.von) / f.von) * 100);
   const mittel = prozente.length ? prozente.reduce((a, b) => a + b, 0) / prozente.length : null;
 
-  // Die Besuche bleiben bei 7 Tagen, unabhängig vom Steigerungs-Modus:
-  // „war ich diese Woche oft genug da" ist eine eigene Frage.
-  const grenze7 = jetzt - BESUCHE_TAGE * 86400000;
-  const letzte7 = entries.filter((e) => new Date(e.date).getTime() >= grenze7);
+  // Die Besuche folgen dem gewählten Vergleich – außer bei „Letztes Training",
+  // das kein Zeitraum ist (siehe besuchsFenster).
+  const fenster = besuchsFenster(modus, tage);
+  const imFenster = fenster
+    ? entries.filter((e) => new Date(e.date).getTime() >= jetzt - fenster * 86400000)
+    : entries;
 
   return {
     modus,
-    besucheTage: BESUCHE_TAGE,
+    tage,
+    besucheTage: fenster, // null = ohne Begrenzung
     mittlereSteigerungProzent: mittel,
     bewerteteUebungen: mitVergleich.length,
-    besuche: new Set(letzte7.map((e) => tagesSchluessel(e.date))).size,
-    besucheEintraege: letzte7.length,
+    besuche: new Set(imFenster.map((e) => tagesSchluessel(e.date))).size,
+    besucheEintraege: imFenster.length,
     proUebung,
   };
 }

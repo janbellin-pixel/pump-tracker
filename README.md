@@ -29,15 +29,22 @@ Unten sitzt eine Reiterleiste mit **Übungen · Statistik · Mehr**.
 
 Drei Werte, mit einem Umschalter für den Vergleichszeitraum:
 
-| Modus | Was verglichen wird |
-| --- | --- |
-| **Letztes Training** | die beiden jüngsten Einträge je Übung |
-| **Letzte Woche** | erster gegen letzten Eintrag der letzten 7 Tage |
-| **Seit Beginn** | allererster gegen neuesten Eintrag |
+| Modus | Was verglichen wird | Besuchsfenster |
+| --- | --- | --- |
+| **Letztes Training** | die beiden jüngsten Einträge je Übung | 7 Tage |
+| **Letzte Woche** | erster gegen letzten Eintrag der letzten 7 Tage | 7 Tage |
+| **Letzte 30 Tage** | erster gegen letzten Eintrag im Fenster | gleiches Fenster |
+| **Seit Beginn** | allererster gegen neuesten Eintrag | alles |
+
+**Die Tage-Karte zählt hoch:** Jeder weitere Tipp verlängert das Fenster um
+30 Tage – 30, 60, 90 und so fort. Ein Tipp auf eine andere Karte setzt sie
+wieder auf 30 zurück. Ein feiner Innenrahmen zeigt, dass sie noch etwas tut.
 
 „Letztes Training" ist bewusst **kein Zeitfenster**: verglichen werden die
 beiden jüngsten Einträge, auch wenn drei Wochen Pause dazwischenliegen. Ein
-7-Tage-Fenster läge hier daneben, sobald man einmal aussetzt.
+7-Tage-Fenster läge hier daneben, sobald man einmal aussetzt. Genau deshalb
+bleibt die Besuchszählung dort bei einer Woche – zu einem Vergleich zweier
+Einträge gibt es kein passendes Besuchsfenster.
 
 Die drei Werte:
 
@@ -45,8 +52,7 @@ Die drei Werte:
    die Einträge – sonst zöge ein Gerät, an dem du zehnmal warst, den Schnitt
    gegen eines mit zwei Besuchen. Übungen ohne zweiten Eintrag im gewählten
    Zeitraum bleiben draußen, statt als 0 % zu verwässern.
-2. **Wie oft du im Studio warst – letzte 7 Tage.** Bleibt vom Umschalter
-   unberührt: „war ich diese Woche oft genug da" ist eine eigene Frage.
+2. **Wie oft du im Studio warst**, im Fenster der gewählten Karte.
 3. **Steigerung je Übung in Kilogramm**, größter Zuwachs oben.
 
 ## Wichtig: Doppelklick auf index.html funktioniert nicht

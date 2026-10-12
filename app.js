@@ -1178,6 +1178,7 @@ async function viewSortieren() {
  */
 // Gewählter Vergleichszeitraum überlebt den Reiterwechsel innerhalb einer Sitzung.
 let steigerungsModus = 'letztes';
+let steigerungsTage = 30;
 
 async function viewStats() {
   const umgebung = await aktiveUmgebung();
@@ -1211,18 +1212,34 @@ async function viewStats() {
     return;
   }
 
-  /* Eine Filterzeile für die Steigerung – die Besuchszahl bleibt davon unberührt. */
+  /*
+   * Filterzeile für den Vergleichszeitraum.
+   *
+   * Die Tage-Karte ist die einzige, die auf wiederholtes Antippen reagiert:
+   * jeder weitere Tipp verlängert das Fenster um 30 Tage. Ein Wechsel auf eine
+   * andere Karte setzt sie wieder auf 30 – sonst käme man beim Zurückwechseln
+   * unversehens in einem 180-Tage-Fenster heraus, ohne es zu merken.
+   */
   const filterZeile = el('div', { class: 'filter-row', role: 'group', 'aria-label': 'Vergleichszeitraum' });
   for (const m of stats.STEIGERUNG_MODI) {
+    const istTage = m.id === 'tage';
+    const aktiv = m.id === steigerungsModus;
     filterZeile.append(
       el('button', {
         type: 'button',
-        class: 'filter-chip',
-        'aria-pressed': String(m.id === steigerungsModus),
-        text: m.label,
+        class: 'filter-chip' + (istTage && aktiv ? ' zaehlend' : ''),
+        'aria-pressed': String(aktiv),
+        text: istTage ? `Letzte ${steigerungsTage} Tage` : m.label,
+        title: istTage ? 'Nochmal tippen verlängert um 30 Tage' : null,
         onclick: () => {
-          if (steigerungsModus === m.id) return;
-          steigerungsModus = m.id;
+          if (aktiv) {
+            if (!istTage) return;
+            steigerungsTage += stats.TAGE_SCHRITT;
+            haptic();
+          } else {
+            steigerungsModus = m.id;
+            steigerungsTage = stats.TAGE_SCHRITT; // beim Wechsel zurücksetzen
+          }
           viewStats();
         },
       })
@@ -1231,13 +1248,16 @@ async function viewStats() {
   main.append(filterZeile);
 
   const modus = stats.STEIGERUNG_MODI.find((m) => m.id === steigerungsModus);
-  const b = stats.bilanz(alleEintraege, uebungen, steigerungsModus);
+  const b = stats.bilanz(alleEintraege, uebungen, steigerungsModus, Date.now(), steigerungsTage);
+  // „Letzte 90 Tage" statt eines festen Texts – der Zeitraum ist veränderlich.
+  const zeitraumText =
+    steigerungsModus === 'tage' ? `in den letzten ${steigerungsTage} Tagen` : modus.kurz;
 
   /* 1) Mittlere prozentuale Steigerung */
   const proz = b.mittlereSteigerungProzent;
   main.append(
     el('div', { class: 'hero' }, [
-      el('div', { class: 'hero-label', text: `Ø Steigerung ${modus.kurz}` }),
+      el("div", { class: "hero-label", text: `Ø Steigerung ${zeitraumText}` }),
       proz === null
         ? el('div', { class: 'hero-value muted-value', text: '–' })
         : el('div', { class: 'hero-value' }, [
@@ -1258,7 +1278,10 @@ async function viewStats() {
   main.append(
     el('div', { class: 'stat-wide' }, [
       el('div', {}, [
-        el('div', { class: 'stat-label', text: `Im Studio – letzte ${b.besucheTage} Tage` }),
+        el("div", {
+          class: "stat-label",
+          text: b.besucheTage ? `Im Studio – letzte ${b.besucheTage} Tage` : "Im Studio – insgesamt",
+        }),
         el('div', {
           class: 'stat-sub',
           text: `${b.besucheEintraege} ${b.besucheEintraege === 1 ? 'Eintrag' : 'Einträge'} · mehrere Geräte am selben Tag zählen als ein Besuch`,
@@ -1323,7 +1346,10 @@ async function viewStats() {
         el('p', {
           class: 'ch-sub',
           text: b.proUebung.length
-            ? `${modus.erklaerung} Größter Zuwachs oben, Tippen öffnet die Übung.`
+            ? `${
+                modus.erklaerung ||
+                `Erster gegen letzten Eintrag innerhalb der letzten ${steigerungsTage} Tage.`
+              } Größter Zuwachs oben, Tippen öffnet die Übung.`
             : 'Für diesen Zeitraum gibt es keine Einträge.',
         }),
       ]),
