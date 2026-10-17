@@ -337,3 +337,39 @@ export function heutigeSaetze(entries, jetzt = Date.now()) {
   }
   return map;
 }
+
+/**
+ * Wie viele Einträge je Trainingstag – Grundlage für den Kalender.
+ * Schlüssel ist der lokale Kalendertag (YYYY-MM-DD).
+ */
+export function eintraegeJeTag(entries) {
+  const map = new Map();
+  for (const e of entries) {
+    const k = tagesSchluessel(e.date);
+    map.set(k, (map.get(k) || 0) + 1);
+  }
+  return map;
+}
+
+/**
+ * Baut das Raster eines Monats, Montag zuerst.
+ *
+ * Gefüllt wird mit `null` für die Tage vor dem Monatsersten, damit das Raster
+ * sieben Spalten behält und der Wochentag stimmt – ohne diese Lücken säße der
+ * Erste eines Monats immer montags.
+ */
+export function monatsRaster(jahr, monat) {
+  const erster = new Date(jahr, monat, 1);
+  const tageImMonat = new Date(jahr, monat + 1, 0).getDate();
+  const versatz = (erster.getDay() + 6) % 7; // Montag = 0
+
+  const zellen = [];
+  for (let i = 0; i < versatz; i++) zellen.push(null);
+  for (let t = 1; t <= tageImMonat; t++) {
+    const d = new Date(jahr, monat, t);
+    zellen.push({ tag: t, schluessel: tagesSchluessel(d.toISOString()), datum: d });
+  }
+  return zellen;
+}
+
+export const WOCHENTAGE = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];

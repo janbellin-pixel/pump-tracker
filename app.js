@@ -1356,6 +1356,138 @@ async function viewStats() {
       liste,
     ])
   );
+
+  /* 4) Trainingstage im Kalender */
+  main.append(kalenderKarte(alleEintraege, umgebung ? umgebung.id : null));
+}
+
+/* ---------------- Trainingskalender ---------------- */
+
+// 0 = laufender Monat, −1 = der davor. Überlebt den Reiterwechsel.
+let kalenderMonat = 0;
+// Beim Wechsel der Trainingsumgebung zurück auf den laufenden Monat: ein
+// Kalender, der in einer anderen Umgebung noch zwei Monate zurücksteht und
+// dort „kein Training" zeigt, führt in die Irre.
+let kalenderUmgebung = null;
+
+/**
+ * Monatskalender mit den Trainingstagen.
+ *
+ * Eigene Monatsblättern statt einer Bindung an den Zeitraum-Umschalter oben:
+ * „Seit Beginn" würde sonst ein Jahr an Rastern erzeugen, und „Letzte Woche"
+ * einen halben Monat. Blättern ist die Navigation, die man von einem Kalender
+ * ohnehin erwartet.
+ */
+function kalenderKarte(eintraege, umgebungId) {
+  if (kalenderUmgebung !== umgebungId) {
+    kalenderMonat = 0;
+    kalenderUmgebung = umgebungId;
+  }
+  const proTag = stats.eintraegeJeTag(eintraege);
+  const karte = el('div', { class: 'ch-card' });
+  const inhalt = el('div');
+
+  const zeichne = () => {
+    inhalt.replaceChildren();
+
+    const heute = new Date();
+    const zeigt = new Date(heute.getFullYear(), heute.getMonth() + kalenderMonat, 1);
+    const jahr = zeigt.getFullYear();
+    const monat = zeigt.getMonth();
+    const zellen = stats.monatsRaster(jahr, monat);
+
+    const besucheImMonat = zellen.filter((z) => z && proTag.has(z.schluessel)).length;
+    const heuteSchluessel = stats.tagesSchluessel(heute.toISOString());
+
+    /* Kopfzeile mit Blättern */
+    inhalt.append(
+      el('div', { class: 'kal-kopf' }, [
+        el('button', {
+          class: 'kal-pfeil',
+          type: 'button',
+          text: '‹',
+          'aria-label': 'Vorheriger Monat',
+          onclick: () => {
+            kalenderMonat--;
+            haptic();
+            zeichne();
+          },
+        }),
+        el('div', { class: 'kal-titel' }, [
+          el('div', {
+            class: 'kal-monat',
+            text: zeigt.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }),
+          }),
+          el('div', {
+            class: 'kal-summe',
+            text: besucheImMonat
+              ? `${besucheImMonat} ${besucheImMonat === 1 ? 'Trainingstag' : 'Trainingstage'}`
+              : 'kein Training',
+          }),
+        ]),
+        el('button', {
+          class: 'kal-pfeil',
+          type: 'button',
+          text: '›',
+          // Nicht in die Zukunft blättern – dort steht nie etwas.
+          disabled: kalenderMonat >= 0 ? true : null,
+          'aria-label': 'Nächster Monat',
+          onclick: () => {
+            kalenderMonat++;
+            haptic();
+            zeichne();
+          },
+        }),
+      ])
+    );
+
+    /* Wochentagsleiste */
+    const kopf = el('div', { class: 'kal-raster kal-wochentage', 'aria-hidden': 'true' });
+    for (const w of stats.WOCHENTAGE) kopf.append(el('span', { text: w }));
+    inhalt.append(kopf);
+
+    /* Tage */
+    const raster = el('div', { class: 'kal-raster' });
+    for (const z of zellen) {
+      if (!z) {
+        raster.append(el('span', { class: 'kal-leer' }));
+        continue;
+      }
+      const anzahl = proTag.get(z.schluessel) || 0;
+      const klassen =
+        'kal-tag' +
+        (anzahl ? ' trainiert' : '') +
+        (z.schluessel === heuteSchluessel ? ' heute' : '');
+
+      raster.append(
+        el('span', {
+          class: klassen,
+          text: String(z.tag),
+          // Die Farbe allein trägt die Information nicht – der Vorlesetext
+          // nennt sie ausdrücklich.
+          'aria-label': anzahl
+            ? `${z.datum.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}: trainiert, ${anzahl} ${anzahl === 1 ? 'Gerät' : 'Geräte'}`
+            : `${z.datum.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}: kein Training`,
+          title: anzahl ? `${anzahl} ${anzahl === 1 ? 'Gerät' : 'Geräte'}` : null,
+        })
+      );
+    }
+    inhalt.append(raster);
+  };
+
+  zeichne();
+
+  karte.append(
+    el('div', { class: 'ch-head' }, [
+      el('h3', { class: 'ch-title', text: 'Trainingstage' }),
+      el('p', {
+        class: 'ch-sub',
+        text: 'Markiert sind die Tage mit Einträgen in dieser Trainingsumgebung.',
+      }),
+    ]),
+    inhalt
+  );
+  return karte;
 }
 
 /* ---------------- Einstellungen: Farben ---------------- */

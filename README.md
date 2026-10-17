@@ -357,6 +357,22 @@ Zwei Dinge passieren dabei automatisch:
 - **Der Zustand steht zusätzlich im Vorlesetext** der Schaltfläche, damit die
   Information nicht allein an der Farbe hängt.
 
+## Trainingskalender
+
+Unten im Statistik-Reiter steht ein Monatskalender. Markiert sind die Tage mit
+Einträgen, umrandet ist der heutige Tag; über der Woche steht, wie viele
+Trainingstage der Monat hatte.
+
+Mit **‹** und **›** blätterst du durch die Monate. Vorwärts endet beim
+laufenden Monat – dahinter steht ohnehin nichts. Ein Wechsel der
+Trainingsumgebung setzt den Kalender auf den laufenden Monat zurück: ein
+Kalender, der in einer anderen Umgebung noch zwei Monate zurücksteht und dort
+„kein Training" zeigt, führt in die Irre.
+
+Der Kalender blättert bewusst eigenständig und hängt **nicht** am
+Zeitraum-Umschalter darüber: „Seit Beginn" ergäbe sonst ein Jahr voller Raster,
+„Letzte Woche" einen halben Monat.
+
 ## Trainingsumgebungen
 
 Übungen gehören je einer **Trainingsumgebung** an – einem Studio, dem
